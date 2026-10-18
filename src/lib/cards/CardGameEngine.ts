@@ -209,9 +209,13 @@ export class CardUtils {
     const shuffled = [...deck.cards];
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      const a = shuffled[i]!;
+      shuffled[i] = shuffled[j]!;
+      shuffled[j] = a;
     }
-    return { cards: shuffled, jokers: deck.jokers };
+    return deck.jokers === undefined
+      ? { cards: shuffled }
+      : { cards: shuffled, jokers: deck.jokers };
   }
 
   static getCardValue(rank: Rank): number {
@@ -239,6 +243,8 @@ export class CardUtils {
   static dealFromDeck(deck: Deck, count: number): { deck: Deck; cards: Card[] } {
     const cards = deck.cards.slice(0, count);
     const remaining = deck.cards.slice(count);
-    return { deck: { cards: remaining, jokers: deck.jokers }, cards };
+    const rest: Deck =
+      deck.jokers === undefined ? { cards: remaining } : { cards: remaining, jokers: deck.jokers };
+    return { deck: rest, cards };
   }
 }

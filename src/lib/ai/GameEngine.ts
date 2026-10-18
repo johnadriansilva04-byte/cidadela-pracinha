@@ -1,52 +1,50 @@
 /**
- * Interface genérica para motores de jogos que integram com IA (MCTS, Minimax, etc.).
- * Qualquer jogo de tabuleiro/estratégia pode implementar esta interface para usar
- * a IA genérica do sistema.
+ * Contrato genérico de motor de jogo para a IA (MCTS, Minimax, heurística).
+ *
+ * Qualquer jogo de tabuleiro/estratégia implementa esta interface e passa a
+ * funcionar com a IA genérica do sistema — sem acoplar a IA às regras do jogo.
  */
-export interface GameState {
-  /** Estado serializável do jogo (deve ser imutável após aplicação de jogadas) */
-  readonly [key: string]: any;
-}
 
-export interface Move {
-  /** Representação de uma jogada (tipo depende do jogo) */
-  readonly [key: string]: any;
-}
+/**
+ * Estado de jogo. Deve ser tratado como IMUTÁVEL: `applyMove` devolve uma nova
+ * instância e nunca altera a recebida (a árvore do MCTS depende disso).
+ */
+export type GameState = object;
+
+/** Jogada genérica: a forma concreta é definida por cada jogo. */
+export type Move = object;
 
 export interface GameEngine<S extends GameState, M extends Move> {
-  /**
-   * Retorna todas as jogadas legais para o estado atual.
-   * Deve ser determinístico e completo.
-   */
+  /** Todas as jogadas legais de quem deve jogar no estado atual (completo e determinístico). */
   getValidMoves(state: S): M[];
 
-  /**
-   * Aplica uma jogada ao estado e retorna o novo estado.
-   * Não deve modificar o estado original (imutabilidade).
-   */
+  /** Aplica a jogada e devolve um NOVO estado, sem mutar o recebido. */
   applyMove(state: S, move: M): S;
 
-  /**
-   * Verifica se o jogo terminou.
-   */
+  /** O jogo terminou? */
   isGameOver(state: S): boolean;
 
-  /**
-   * Retorna o vencedor do jogo (null se não acabou, empate, ou jogo em andamento).
-   * Identificador do jogador: deve ser consistente com a implementação do jogo.
-   */
+  /** Vencedor da partida (null = em andamento ou empate). */
   getWinner(state: S): number | null;
 
   /**
-   * Avaliação heurística do estado para um jogador específico.
-   * Valores positivos = vantagem para o jogador, negativos = desvantagem.
-   * Opcional para MCTS puro, mas útil para MCTS com UCB1 tuneado.
+   * Avaliação heurística do estado do ponto de vista de `player`.
+   * Positivo = vantagem para `player`. Usada no corte de rollout.
    */
   evaluate(state: S, player: number): number;
 
+  /** Jogador que deve jogar neste estado (número, consistente com getWinner). */
+  getCurrentPlayer(state: S): number;
+
   /**
-   * Retorna o jogador que deve jogar no estado atual.
-   * Opcional se o estado já tiver essa informação.
+   * Chave estável da jogada — usada para deduplicar filhos na árvore.
+   * Padrão: `JSON.stringify(move)`.
    */
-  getCurrentPlayer?(state: S): number;
+  moveKey?(move: M): string;
+
+  /**
+   * Jogada sugerida pelo próprio jogo (ex.: estratégia básica do Blackjack).
+   * Quando existe, a IA pode usá-la em vez da busca genérica.
+   */
+  suggestMove?(state: S, player: number): M | null;
 }

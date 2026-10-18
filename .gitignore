@@ -34,3 +34,6 @@ dist-ssr
 *.sw?
 .env
 public/Ch49_nonPBR.fbx
+
+# Artefato gerado por testes/run-tsx.mjs
+.tmp-teste.cjs

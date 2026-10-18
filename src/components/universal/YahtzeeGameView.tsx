@@ -1,29 +1,57 @@
-import { useState } from "react";
-import { BackButton } from "@/components/BackButton";
-import { UniversalGameFactory } from "@/lib/universal/UniversalGameFactory";
+/**
+ * Mesa de YAHTZEE.
+ *
+ * Cinco dados com seleção de "segurar", até três rolagens por turno e cartela
+ * de 13 categorias. Cada categoria mostra o quanto valeria AGORA, então o
+ * jogador vê o custo de oportunidade antes de marcar.
+ */
+import { useCallback, useMemo, useState } from "react";
+import {
+  YahtzeeAdapter,
+  YAHTZEE_CATEGORIES,
+  scoreCategory,
+  scorecardTotal,
+  type YahtzeeCategory,
+  type YahtzeeState,
+} from "@/lib/universal/adapters/YahtzeeAdapter";
+import { jogadaComImperfeicao, type AiLevel } from "@/lib/universal/aiUniversal";
+import { GameShell, ResultBanner, TablePanel } from "./GameShell";
 
 interface YahtzeeGameViewProps {
   onBack: () => void;
 }
 
-const CATEGORY_LABELS: Record<string, string> = {
-  ones: "1s",
-  twos: "2s",
-  threes: "3s",
-  fours: "4s",
-  fives: "5s",
-  sixes: "6s",
+const CATEGORY_LABEL: Record<YahtzeeCategory, string> = {
+  ones: "Uns",
+  twos: "Dois",
+  threes: "Três",
+  fours: "Quatros",
+  fives: "Cincos",
+  sixes: "Seises",
   three_of_kind: "Trinca",
   four_of_kind: "Quadra",
   full_house: "Full House",
-  small_straight: "Seq. Pequena",
-  large_straight: "Seq. Grande",
+  small_straight: "Seq. pequena",
+  large_straight: "Seq. grande",
   yahtzee: "Yahtzee",
   chance: "Chance",
 };
 
-function Die({ value, onClick, held }: { value: number; onClick?: () => void; held?: boolean }) {
-  const dots: Record<number, number[]> = {
+const UPPER: YahtzeeCategory[] = ["ones", "twos", "threes", "fours", "fives", "sixes"];
+
+/** Face do dado com pontos desenhados. */
+function Die({
+  value,
+  held,
+  onClick,
+  disabled = false,
+}: {
+  value: number;
+  held: boolean;
+  onClick?: (() => void) | undefined;
+  disabled?: boolean | undefined;
+}) {
+  const PIPS: Record<number, number[]> = {
     1: [4],
     2: [0, 8],
     3: [0, 4, 8],
@@ -31,25 +59,23 @@ function Die({ value, onClick, held }: { value: number; onClick?: () => void; he
     5: [0, 2, 4, 6, 8],
     6: [0, 2, 3, 5, 6, 8],
   };
+  const active = PIPS[value] ?? [];
 
   return (
     <button
       onClick={onClick}
-      disabled={!onClick}
-      className={`
-        h-16 w-16 rounded-lg bg-white shadow-lg border-2
-        ${held ? "border-green-500 bg-green-50" : "border-slate-300"}
-        ${onClick ? "hover:scale-105 transition-transform cursor-pointer" : ""}
-        grid grid-cols-3 gap-1 p-2
-      `}
+      disabled={disabled || !onClick}
+      aria-label={`dado ${value}${held ? " segurado" : ""}`}
+      className={`grid h-16 w-16 grid-cols-3 grid-rows-3 gap-0.5 rounded-xl border-2 p-1.5 shadow-lg transition-all sm:h-20 sm:w-20 ${
+        held
+          ? "border-emerald-400 bg-emerald-500/20"
+          : "border-slate-300 bg-white"
+      } ${onClick && !disabled ? "cursor-pointer hover:-translate-y-0.5 active:scale-95" : "cursor-default"}`}
     >
-      {Array.from({ length: 9 }).map((_, index) => (
-        <div
-          key={index}
-          className={`
-            rounded-full
-            ${dots[value]?.includes(index) ? "bg-slate-900" : "bg-transparent"}
-          `}
+      {Array.from({ length: 9 }, (_, i) => (
+        <span
+          key={i}
+          className={`rounded-full ${active.includes(i) ? (held ? "bg-emerald-300" : "bg-slate-900") : "bg-transparent"}`}
         />
       ))}
     </button>
@@ -57,158 +83,249 @@ function Die({ value, onClick, held }: { value: number; onClick?: () => void; he
 }
 
 export function YahtzeeGameView({ onBack }: YahtzeeGameViewProps) {
-  const [gameState, setGameState] = useState(() =>
-    UniversalGameFactory.createGame("dice_yahtzee", 2)
+  const engine = useMemo(() => new YahtzeeAdapter(), []);
+  const [level, setLevel] = useState<AiLevel>("medio");
+  const [state, setState] = useState<YahtzeeState>(() => engine.initializeGame("dice_yahtzee", 1));
+  const [thinking, setThinking] = useState(false);
+  const [restartKey, setRestartKey] = useState(0);
+
+  const cs = state.customState;
+  const gameOver = state.gameOver;
+  const humanTurn = state.currentPlayer === 0 && !gameOver;
+  const card = cs.scorecards[0] ?? {};
+  const canRoll = cs.rollsLeft > 0 && humanTurn;
+  const canScore = cs.rollsLeft === 0 && humanTurn;
+
+  /** Prévia: quanto cada categoria valeria com os dados atuais. */
+  const preview = useMemo(() => {
+    const map = new Map<YahtzeeCategory, number>();
+    for (const category of YAHTZEE_CATEGORIES) map.set(category, scoreCategory(cs.dice, category));
+    return map;
+  }, [cs.dice]);
+
+  const upperSubtotal = useMemo(
+    () => UPPER.reduce((sum, category) => sum + (card[category] ?? 0), 0),
+    [card],
   );
 
-  const engine = UniversalGameFactory.createEngine("dice_yahtzee");
-  const validMoves = engine.getValidMoves(gameState);
-  const isGameOver = engine.isGameOver(gameState);
-  const winner = isGameOver ? engine.getWinner(gameState) : null;
+  const restart = useCallback(() => {
+    setState(engine.initializeGame("dice_yahtzee", 1));
+    setThinking(false);
+    setRestartKey((k) => k + 1);
+  }, [engine]);
 
-  const dice = gameState.dice as number[] || [];
-  const held = gameState.held as boolean[] || [];
-  const scores = gameState.scores as Record<string, number> || {};
-  const rollsLeft = gameState.rollsLeft as number || 3;
-  const currentPlayer = gameState.currentPlayer as number || 0;
+  /** Joga pela máquina (quando houver mais de um jogador). */
+  const vezDaMaquina = useCallback(
+    (base: YahtzeeState) => {
+      setThinking(true);
+      window.setTimeout(() => {
+        let atual = base;
+        let guard = 0;
+        while (!atual.gameOver && atual.currentPlayer !== 0 && guard < 40) {
+          const decision = jogadaComImperfeicao(engine, atual, atual.currentPlayer, level);
+          if (!decision.move) break;
+          atual = engine.applyMove(atual, decision.move) as YahtzeeState;
+          guard++;
+        }
+        setState(atual);
+        setThinking(false);
+      }, 80);
+    },
+    [engine, level],
+  );
 
-  const handleRoll = () => {
-    const rollMove = validMoves.find((m: any) => m.action === "roll");
-    if (rollMove) {
-      const newState = engine.applyMove(gameState, rollMove);
-      setGameState(newState);
-    }
-  };
+  const aplicar = useCallback(
+    (move: Parameters<YahtzeeAdapter["applyMove"]>[1]) => {
+      const after = engine.applyMove(state, move) as YahtzeeState;
+      setState(after);
+      if (!after.gameOver && after.currentPlayer !== 0) vezDaMaquina(after);
+    },
+    [engine, state, vezDaMaquina],
+  );
 
-  const handleToggleHold = (index: number) => {
-    const holdMove = validMoves.find((m: any) => m.action === "hold" && m.diceIndex === index);
-    if (holdMove) {
-      const newState = engine.applyMove(gameState, holdMove);
-      setGameState(newState);
-    }
-  };
+  /** Rola mantendo os dados marcados. */
+  const rolar = useCallback(() => {
+    const keep = cs.held.map((held, i) => (held ? i : -1)).filter((i) => i >= 0);
+    const move = engine
+      .getValidMoves(state)
+      .find((m) => m.data["action"] === "roll" && JSON.stringify(m.data["keep"]) === JSON.stringify(keep));
+    const fallback = move ?? engine.getValidMoves(state).find((m) => m.data["action"] === "roll");
+    if (fallback) aplicar(fallback);
+  }, [engine, state, cs.held, aplicar]);
 
-  const handleScoreCategory = (category: string) => {
-    const scoreMove = validMoves.find((m: any) => m.action === "score" && m.category === category);
-    if (scoreMove) {
-      const newState = engine.applyMove(gameState, scoreMove);
-      setGameState(newState);
-    }
-  };
+  /** Alterna "segurar" um dado (só antes de rolar). */
+  const alternarHold = useCallback(
+    (index: number) => {
+      if (!canRoll) return;
+      setState((prev) => {
+        const next = structuredClone(prev) as YahtzeeState;
+        next.customState.held[index] = !next.customState.held[index];
+        return next;
+      });
+    },
+    [canRoll],
+  );
 
-  const handleNewGame = () => {
-    setGameState(UniversalGameFactory.createGame("dice_yahtzee", 2));
-  };
+  const marcar = useCallback(
+    (category: YahtzeeCategory) => {
+      if (!canScore) return;
+      const move = engine
+        .getValidMoves(state)
+        .find((m) => m.data["action"] === "score" && m.data["category"] === category);
+      if (move) aplicar(move);
+    },
+    [engine, state, canScore, aplicar],
+  );
 
-  const calculateTotal = (playerIndex: number) => {
-    const playerScores = gameState[`player${playerIndex}Scores`] as Record<string, number> || {};
-    return Object.values(playerScores).reduce((sum: number, val: number) => sum + (val || 0), 0);
-  };
+  const statusText = gameOver
+    ? "Cartela completa"
+    : canRoll
+      ? `Rolagem ${4 - cs.rollsLeft} de 3 — toque nos dados para segurar`
+      : "Escolha uma categoria para marcar";
 
-  const currentScores = gameState[`player${currentPlayer}Scores`] as Record<string, number> || {};
-  const otherScores = gameState[`player${currentPlayer === 0 ? 1 : 0}Scores`] as Record<string, number> || {};
+  const placar = state.players.map((p, i) => ({
+    nome: p.name,
+    total: scorecardTotal(cs.scorecards[i] ?? {}),
+  }));
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 p-4">
-      <BackButton onClick={onBack} />
-      <div className="mx-auto max-w-4xl">
-        <h1 className="mb-6 text-center text-3xl font-bold text-white">Yahtzee</h1>
-
-        <div className="mb-4 rounded-lg bg-slate-800 p-4 text-white">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-slate-300">
-              Jogador: <span className="font-bold text-white">{currentPlayer === 0 ? "Você" : "IA"}</span>
-            </p>
-            <p className="text-sm text-slate-300">
-              Rolagens restantes: <span className="font-bold text-white">{rollsLeft}</span>
-            </p>
-          </div>
-          {isGameOver && (
-            <p className="mt-2 text-lg font-bold text-green-400">
-              {winner === null ? "Empate!" : winner === 0 ? "Você venceu!" : "IA venceu!"}
-            </p>
-          )}
+    <GameShell
+      key={restartKey}
+      title="Yahtzee"
+      subtitle="13 categorias — o bônus superior exige 63 pontos"
+      onBack={onBack}
+      onRestart={restart}
+      level={state.players.length > 1 ? level : undefined}
+      onLevelChange={state.players.length > 1 ? setLevel : undefined}
+      thinking={thinking}
+      status={
+        <>
+          <span className="font-semibold">{statusText}</span>
+          <span className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
+            <span>
+              rolagens restantes: <span className="font-bold text-foreground">{cs.rollsLeft}</span>
+            </span>
+            <span>
+              total: <span className="font-bold text-foreground">{scorecardTotal(card)}</span>
+            </span>
+          </span>
+        </>
+      }
+      footer="Segure os dados que quer manter e role de novo. Depois de 3 rolagens, marque uma categoria."
+    >
+      <TablePanel className="bg-gradient-to-b from-slate-800/80 to-slate-950/90">
+        {/* Dados */}
+        <div className="mb-4 flex flex-wrap items-center justify-center gap-3">
+          {cs.dice.map((value, index) => (
+            <Die
+              key={`die-${index}`}
+              value={value}
+              held={cs.held[index] ?? false}
+              onClick={canRoll && !thinking ? () => alternarHold(index) : undefined}
+              disabled={!canRoll || thinking}
+            />
+          ))}
         </div>
 
-        {/* Dice */}
-        <div className="mb-6 rounded-lg bg-slate-800 p-6">
-          <h3 className="mb-4 text-lg font-semibold text-white">Dados</h3>
-          <div className="flex gap-4 justify-center flex-wrap">
-            {dice.map((value, index) => (
-              <Die
-                key={index}
-                value={value}
-                held={held[index]}
-                onClick={rollsLeft > 0 && !isGameOver ? () => handleToggleHold(index) : undefined}
-              />
+        {/* Botão de rolar */}
+        <div className="mb-5 flex justify-center">
+          <button
+            onClick={rolar}
+            disabled={!canRoll || thinking}
+            className="rounded-xl border border-amber-400/60 bg-amber-500/20 px-6 py-2.5 text-sm font-bold text-amber-100 transition-all hover:bg-amber-500/30 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {cs.rollsLeft === 3 ? "Rolar os dados" : `Rolar de novo (${cs.rollsLeft})`}
+          </button>
+        </div>
+
+        {/* Cartela */}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <div className="mb-1.5 flex items-baseline justify-between">
+              <span className="text-xs font-bold uppercase tracking-wide text-slate-300">Bloco superior</span>
+              <span className={`text-xs font-bold ${upperSubtotal >= 63 ? "text-emerald-300" : "text-slate-400"}`}>
+                {upperSubtotal}/63 {upperSubtotal >= 63 ? "· bônus +35!" : ""}
+              </span>
+            </div>
+            <div className="space-y-1">
+              {UPPER.map((category) => {
+                const marcado = card[category];
+                const bloqueado = marcado !== null && marcado !== undefined;
+                return (
+                  <button
+                    key={category}
+                    onClick={() => marcar(category)}
+                    disabled={!canScore || bloqueado}
+                    className={`flex w-full items-center justify-between rounded-lg border px-3 py-1.5 text-sm transition-all ${
+                      bloqueado
+                        ? "border-border/40 bg-background/40 text-muted-foreground"
+                        : canScore
+                          ? "border-amber-400/50 bg-amber-500/10 hover:bg-amber-500/20 active:scale-[0.98]"
+                          : "border-border/50 bg-background/50"
+                    }`}
+                  >
+                    <span className="font-semibold">{CATEGORY_LABEL[category]}</span>
+                    <span className="font-black">
+                      {bloqueado ? marcado : canScore ? preview.get(category) : "—"}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <div className="mb-1.5 text-xs font-bold uppercase tracking-wide text-slate-300">
+              Bloco inferior
+            </div>
+            <div className="space-y-1">
+              {YAHTZEE_CATEGORIES.filter((c) => !UPPER.includes(c)).map((category) => {
+                const marcado = card[category];
+                const bloqueado = marcado !== null && marcado !== undefined;
+                return (
+                  <button
+                    key={category}
+                    onClick={() => marcar(category)}
+                    disabled={!canScore || bloqueado}
+                    className={`flex w-full items-center justify-between rounded-lg border px-3 py-1.5 text-sm transition-all ${
+                      bloqueado
+                        ? "border-border/40 bg-background/40 text-muted-foreground"
+                        : canScore
+                          ? "border-violet-400/50 bg-violet-500/10 hover:bg-violet-500/20 active:scale-[0.98]"
+                          : "border-border/50 bg-background/50"
+                    }`}
+                  >
+                    <span className="font-semibold">{CATEGORY_LABEL[category]}</span>
+                    <span className="font-black">
+                      {bloqueado ? marcado : canScore ? preview.get(category) : "—"}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Placar (só com mais de um jogador) */}
+        {placar.length > 1 ? (
+          <div className="mt-4 flex flex-wrap justify-center gap-3 border-t border-border/30 pt-3">
+            {placar.map((p) => (
+              <span key={p.nome} className="text-xs text-muted-foreground">
+                {p.nome}: <span className="font-bold text-foreground">{p.total}</span>
+              </span>
             ))}
           </div>
-          {rollsLeft > 0 && !isGameOver && currentPlayer === 0 && (
-            <div className="mt-4 text-center">
-              <button
-                onClick={handleRoll}
-                className="rounded-lg bg-blue-600 px-8 py-3 font-bold text-white transition hover:bg-blue-700"
-              >
-                Rolar Dados
-              </button>
-            </div>
-          )}
-        </div>
+        ) : null}
 
-        {/* Scorecard */}
-        <div className="mb-6 rounded-lg bg-slate-800 p-6">
-          <h3 className="mb-4 text-lg font-semibold text-white">Cartela de Pontuação</h3>
-          <div className="space-y-2">
-            {Object.entries(CATEGORY_LABELS).map(([category, label]) => {
-              const currentScore = currentScores[category];
-              const otherScore = otherScores[category];
-              const canScore = validMoves.some((m: any) => m.action === "score" && m.category === category && m.player === currentPlayer);
-
-              return (
-                <div
-                  key={category}
-                  className={`
-                    flex items-center justify-between p-3 rounded-lg
-                    ${canScore && currentPlayer === 0 && !isGameOver ? "bg-slate-700 hover:bg-slate-600 cursor-pointer" : "bg-slate-700/50"}
-                  `}
-                  onClick={() => canScore && currentPlayer === 0 && !isGameOver ? handleScoreCategory(category) : undefined}
-                >
-                  <span className="text-white font-medium">{label}</span>
-                  <div className="flex gap-4">
-                    <span className="text-slate-300">{currentScore !== undefined ? currentScore : "-"}</span>
-                    <span className="text-slate-500">{otherScore !== undefined ? otherScore : "-"}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Totals */}
-        <div className="mb-6 rounded-lg bg-slate-800 p-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <p className="text-slate-400">Seu Total</p>
-              <p className="text-2xl font-bold text-white">{calculateTotal(0)}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-slate-400">Total da IA</p>
-              <p className="text-2xl font-bold text-white">{calculateTotal(1)}</p>
-            </div>
-          </div>
-        </div>
-
-        {isGameOver && (
-          <div className="text-center">
-            <button
-              onClick={handleNewGame}
-              className="rounded-lg bg-green-600 px-8 py-3 font-bold text-white transition hover:bg-green-700"
-            >
-              Novo Jogo
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
+        {gameOver ? (
+          <ResultBanner
+            winner={state.winner}
+            reason="cartela completa"
+            opponentName="A máquina"
+            onRestart={restart}
+          />
+        ) : null}
+      </TablePanel>
+    </GameShell>
   );
 }

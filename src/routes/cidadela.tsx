@@ -39,6 +39,10 @@ import { CheckersGameView } from "@/components/universal/CheckersGameView";
 import { BlackjackGameView } from "@/components/universal/BlackjackGameView";
 import { DominoGameView } from "@/components/universal/DominoGameView";
 import { YahtzeeGameView } from "@/components/universal/YahtzeeGameView";
+import { ConnectFourGameView } from "@/components/universal/ConnectFourGameView";
+import { TicTacToeGameView } from "@/components/universal/TicTacToeGameView";
+import { ReversiGameView } from "@/components/universal/ReversiGameView";
+import { MancalaGameView } from "@/components/universal/MancalaGameView";
 
 export const Route = createFileRoute("/cidadela")({
   head: () => ({
@@ -80,6 +84,10 @@ type Game =
   | "blackjack"
   | "domino"
   | "yahtzee"
+  | "liga4"
+  | "velha"
+  | "reversi"
+  | "mancala"
   | null;
 
 const GAMES = [
@@ -136,6 +144,34 @@ const GAMES = [
     id: "yahtzee" as Game,
     label: "Yahtzee",
     description: "Dados e sorte",
+    icon: Target,
+    status: "disponível",
+  },
+  {
+    id: "liga4" as Game,
+    label: "Liga 4",
+    description: "Alinhe quatro",
+    icon: Grid3X3,
+    status: "disponível",
+  },
+  {
+    id: "velha" as Game,
+    label: "Jogo da Velha",
+    description: "Três em linha",
+    icon: Grid3X3,
+    status: "disponível",
+  },
+  {
+    id: "reversi" as Game,
+    label: "Reversi",
+    description: "Vire peças",
+    icon: Target,
+    status: "disponível",
+  },
+  {
+    id: "mancala" as Game,
+    label: "Mancala",
+    description: "Semeie e capture",
     icon: Target,
     status: "disponível",
   },
@@ -303,7 +339,17 @@ function CidadelaCompView() {
       return;
     }
     // Jogos do sistema universal
-    if (game === "xadrez" || game === "dama" || game === "blackjack" || game === "domino" || game === "yahtzee") {
+    if (
+      game === "xadrez" ||
+      game === "dama" ||
+      game === "blackjack" ||
+      game === "domino" ||
+      game === "yahtzee" ||
+      game === "liga4" ||
+      game === "velha" ||
+      game === "reversi" ||
+      game === "mancala"
+    ) {
       setActiveGame(game);
       return;
     }
@@ -491,6 +537,22 @@ function CidadelaCompView() {
 
   if (activeGame === "yahtzee") {
     return <YahtzeeGameView onBack={() => setActiveGame(null)} />;
+  }
+
+  if (activeGame === "liga4") {
+    return <ConnectFourGameView onBack={() => setActiveGame(null)} />;
+  }
+
+  if (activeGame === "velha") {
+    return <TicTacToeGameView onBack={() => setActiveGame(null)} />;
+  }
+
+  if (activeGame === "reversi") {
+    return <ReversiGameView onBack={() => setActiveGame(null)} />;
+  }
+
+  if (activeGame === "mancala") {
+    return <MancalaGameView onBack={() => setActiveGame(null)} />;
   }
 
   return (

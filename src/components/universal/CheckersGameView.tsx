@@ -1,155 +1,231 @@
-import { useState } from "react";
-import { BackButton } from "@/components/BackButton";
-import { UniversalGameFactory } from "@/lib/universal/UniversalGameFactory";
-import { MCTS } from "@/lib/ai/MCTS";
+/**
+ * Mesa de DAMAS.
+ *
+ * Tabuleiro 8x8 com casas escuras jogáveis, captura obrigatória em destaque,
+ * capturas em cadeia (a UI mantém a vez da peça que está comendo) e coroação.
+ */
+import { useCallback, useMemo, useState } from "react";
+import { CheckersAdapter, type CheckersMove, type CheckersState } from "@/lib/universal/adapters/CheckersAdapter";
+import { jogadaComImperfeicao, type AiLevel } from "@/lib/universal/aiUniversal";
+import { GameShell, ResultBanner, TablePanel } from "./GameShell";
 
 interface CheckersGameViewProps {
   onBack: () => void;
 }
 
+const SIZE = 8;
+
 export function CheckersGameView({ onBack }: CheckersGameViewProps) {
-  const [gameState, setGameState] = useState(() =>
-    UniversalGameFactory.createGame("board_checkers", 2)
+  const engine = useMemo(() => new CheckersAdapter(), []);
+  const [level, setLevel] = useState<AiLevel>("medio");
+  const [state, setState] = useState<CheckersState>(() => engine.initializeGame("board_checkers", 2));
+  const [selected, setSelected] = useState<string | null>(null);
+  const [thinking, setThinking] = useState(false);
+  const [restartKey, setRestartKey] = useState(0);
+
+  const grid = state.customState.grid;
+  const gameOver = state.gameOver;
+  const chain = state.customState.chainFrom;
+  const humanTurn = state.currentPlayer === 0 && !gameOver;
+
+  const legalMoves = useMemo(
+    () => (gameOver ? [] : (engine.getValidMoves(state) as CheckersMove[])),
+    [engine, state, gameOver],
   );
-  const [selectedSquare, setSelectedSquare] = useState<[number, number] | null>(null);
-  const [isAIThinking, setIsAIThinking] = useState(false);
 
-  const engine = UniversalGameFactory.createEngine("board_checkers");
-  const validMoves = engine.getValidMoves(gameState);
-  const isGameOver = engine.isGameOver(gameState);
-  const winner = isGameOver ? engine.getWinner(gameState) : null;
+  /** Existe captura obrigatória nesta posição? (destaca no aviso) */
+  const mustCapture = useMemo(
+    () => legalMoves.some((m) => m.type === "capture"),
+    [legalMoves],
+  );
 
-  const board = gameState.board as Array<Array<string | null>>;
-
-  const getValidMovesForSquare = (row: number, col: number) => {
-    return validMoves.filter((move: any) => move.from[0] === row && move.from[1] === col);
-  };
-
-  const handleSquareClick = (row: number, col: number) => {
-    if (isGameOver || isAIThinking) return;
-
-    const piece = board[row][col];
-    const pieceColor = piece?.startsWith("white") ? "white" : piece?.startsWith("black") ? "black" : null;
-    const isCurrentPlayerPiece = pieceColor === (gameState.currentPlayer === 0 ? "white" : "black");
-
-    if (selectedSquare) {
-      const [fromRow, fromCol] = selectedSquare;
-      const moves = getValidMovesForSquare(fromRow, fromCol);
-      const targetMove = moves.find((m: any) => m.to[0] === row && m.to[1] === col);
-
-      if (targetMove) {
-        const newState = engine.applyMove(gameState, targetMove);
-        setGameState(newState);
-        setSelectedSquare(null);
-
-        // AI move
-        if (!engine.isGameOver(newState)) {
-          setIsAIThinking(true);
-          setTimeout(() => {
-            const mcts = new MCTS(engine, { maxIterations: 3000, timeBudgetMs: 1500 });
-            const aiMove = mcts.computeMove(newState, 1);
-            const finalState = engine.applyMove(newState, aiMove.move);
-            setGameState(finalState);
-            setIsAIThinking(false);
-          }, 300);
-        }
-      } else if (isCurrentPlayerPiece) {
-        setSelectedSquare([row, col]);
-      } else {
-        setSelectedSquare(null);
-      }
-    } else if (isCurrentPlayerPiece) {
-      setSelectedSquare([row, col]);
+  /** Destinos legais da peça selecionada (ou da peça em cadeia). */
+  const targets = useMemo(() => {
+    const from = chain ?? selected;
+    const map = new Map<string, CheckersMove>();
+    if (!from) return map;
+    for (const move of legalMoves) {
+      if (move.data.from === from) map.set(move.data.to, move);
     }
-  };
+    return map;
+  }, [chain, selected, legalMoves]);
 
-  const handleNewGame = () => {
-    setGameState(UniversalGameFactory.createGame("board_checkers", 2));
-    setSelectedSquare(null);
-  };
+  const restart = useCallback(() => {
+    setState(engine.initializeGame("board_checkers", 2));
+    setSelected(null);
+    setThinking(false);
+    setRestartKey((k) => k + 1);
+  }, [engine]);
 
-  const isLightSquare = (row: number, col: number) => (row + col) % 2 === 0;
+  /** Executa a jogada; se o turno passou para a máquina, ela responde. */
+  const jogar = useCallback(
+    (move: CheckersMove) => {
+      const after = engine.applyMove(state, move) as CheckersState;
+      setState(after);
+      setSelected(null);
+
+      if (after.gameOver) return;
+      // Cadeia: a mesma peça continua comendo — o humano decide de novo.
+      if (after.customState.chainFrom) return;
+      if (after.currentPlayer !== 1) return;
+
+      setThinking(true);
+      window.setTimeout(() => {
+        const decision = jogadaComImperfeicao(engine, after, 1, level);
+        if (decision.move) {
+          let next = engine.applyMove(after, decision.move) as CheckersState;
+          // A IA resolve a cadeia inteira antes de devolver a vez.
+          let guard = 0;
+          while (next.customState.chainFrom && !next.gameOver && guard < 12) {
+            const follow = engine.getValidMoves(next);
+            if (follow.length === 0) break;
+            next = engine.applyMove(next, follow[0]!) as CheckersState;
+            guard++;
+          }
+          setState(next);
+        }
+        setThinking(false);
+      }, 60);
+    },
+    [engine, state, level],
+  );
+
+  const handleSquareClick = useCallback(
+    (x: number, y: number) => {
+      if (!humanTurn || thinking) return;
+      const square = `${x}-${y}`;
+      const piece = grid[y]?.[x] ?? null;
+
+      const target = targets.get(square);
+      if (target) {
+        jogar(target);
+        return;
+      }
+
+      if (piece && piece[0] === "r") {
+        // Só permite selecionar peças que realmente podem jogar.
+        const canPlay = legalMoves.some((m) => m.data.from === square);
+        setSelected(canPlay ? (selected === square ? null : square) : null);
+        return;
+      }
+
+      setSelected(null);
+    },
+    [grid, humanTurn, thinking, targets, legalMoves, selected, jogar],
+  );
+
+  const pieces = useMemo(() => {
+    let mine = 0;
+    let foe = 0;
+    for (const row of grid) {
+      for (const cell of row) {
+        if (!cell) continue;
+        if (cell[0] === "r") mine++;
+        else foe++;
+      }
+    }
+    return { mine, foe };
+  }, [grid]);
+
+  const statusText = gameOver
+    ? state.winner === 0
+      ? "Você venceu!"
+      : state.winner === 1
+        ? "A máquina venceu"
+        : "Empate"
+    : chain
+      ? "Continue capturando com a mesma peça"
+      : humanTurn
+        ? mustCapture
+          ? "Sua vez — captura obrigatória"
+          : "Sua vez (vermelhas)"
+        : "Vez da máquina";
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 p-4">
-      <BackButton onClick={onBack} />
-      <div className="mx-auto max-w-4xl">
-        <h1 className="mb-6 text-center text-3xl font-bold text-white">Dama</h1>
+    <GameShell
+      key={restartKey}
+      title="Damas"
+      subtitle="Você joga com as vermelhas — captura é obrigatória"
+      onBack={onBack}
+      onRestart={restart}
+      level={level}
+      onLevelChange={setLevel}
+      usesMCTS
+      thinking={thinking}
+      status={
+        <>
+          <span className="font-semibold">{statusText}</span>
+          <span className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1">
+              <span className="h-2.5 w-2.5 rounded-full bg-rose-500" />
+              {pieces.mine}
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <span className="h-2.5 w-2.5 rounded-full bg-slate-300" />
+              {pieces.foe}
+            </span>
+          </span>
+        </>
+      }
+      footer="Peças coroadas (♛) andam para qualquer direção. Comer várias peças seguidas mantém a sua vez."
+    >
+      <TablePanel>
+        <div className="mx-auto grid max-w-[min(92vw,34rem)] grid-cols-8 overflow-hidden rounded-xl border-2 border-stone-700">
+          {Array.from({ length: SIZE }, (_, y) =>
+            Array.from({ length: SIZE }, (_, x) => {
+              const square = `${x}-${y}`;
+              const cell = grid[y]?.[x] ?? null;
+              const isDark = (x + y) % 2 === 1;
+              const isSelected = selected === square || chain === square;
+              const isTarget = targets.has(square);
+              const isCaptureTarget = isTarget && (targets.get(square)?.type === "capture");
 
-        <div className="mb-4 rounded-lg bg-slate-800 p-4 text-white">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-slate-300">
-              Turno: <span className="font-bold text-white">{gameState.currentPlayer === 0 ? "Brancas" : "Pretas"}</span>
-            </p>
-            {isAIThinking && (
-              <p className="text-sm text-yellow-400">IA pensando...</p>
-            )}
-          </div>
-          {isGameOver && (
-            <p className="mt-2 text-lg font-bold text-green-400">
-              {winner === null ? "Empate!" : winner === 0 ? "Brancas venceram!" : "Pretas venceram!"}
-            </p>
+              if (!isDark) {
+                return <div key={square} className="aspect-square bg-stone-200/85" />;
+              }
+
+              return (
+                <button
+                  key={square}
+                  onClick={() => handleSquareClick(x, y)}
+                  disabled={!humanTurn || thinking}
+                  aria-label={square}
+                  className={`relative flex aspect-square items-center justify-center bg-stone-700 transition-colors ${
+                    isSelected ? "ring-2 ring-inset ring-emerald-400" : ""
+                  } ${humanTurn && !thinking ? "cursor-pointer hover:bg-stone-600" : "cursor-default"}`}
+                >
+                  {cell ? (
+                    <span
+                      className={`flex h-[72%] w-[72%] items-center justify-center rounded-full text-sm font-black shadow-md sm:text-base ${
+                        cell[0] === "r"
+                          ? "border-2 border-rose-200/70 bg-gradient-to-br from-rose-500 to-rose-700 text-rose-50"
+                          : "border-2 border-slate-400/70 bg-gradient-to-br from-slate-200 to-slate-400 text-slate-800"
+                      }`}
+                    >
+                      {cell.endsWith("K") ? "♛" : ""}
+                    </span>
+                  ) : null}
+
+                  {isCaptureTarget ? (
+                    <span className="pointer-events-none absolute inset-0 ring-4 ring-inset ring-amber-400/80" />
+                  ) : isTarget ? (
+                    <span className="pointer-events-none absolute h-3 w-3 rounded-full bg-emerald-400/80" />
+                  ) : null}
+                </button>
+              );
+            }),
           )}
         </div>
 
-        <div className="mx-auto max-w-md">
-          <div className="grid aspect-square grid-cols-8 rounded-lg overflow-hidden shadow-2xl">
-            {board.map((row, rowIndex) =>
-              row.map((piece, colIndex) => {
-                const isSelected = selectedSquare?.[0] === rowIndex && selectedSquare?.[1] === colIndex;
-                const validMoves = selectedSquare ? getValidMovesForSquare(selectedSquare[0], selectedSquare[1]) : [];
-                const isValidTarget = validMoves.some((m: any) => m.to[0] === rowIndex && m.to[1] === colIndex);
-
-                return (
-                  <button
-                    key={`${rowIndex}-${colIndex}`}
-                    onClick={() => handleSquareClick(rowIndex, colIndex)}
-                    disabled={isGameOver || isAIThinking}
-                    className={`
-                      flex aspect-square items-center justify-center transition-all duration-150
-                      ${isLightSquare(rowIndex, colIndex) ? "bg-amber-100" : "bg-amber-700"}
-                      ${isSelected ? "bg-blue-400!" : ""}
-                      ${isValidTarget ? "bg-green-400!" : ""}
-                      ${!isGameOver && !isAIThinking ? "hover:opacity-80" : "cursor-not-allowed"}
-                    `}
-                  >
-                    {piece && (
-                      <div
-                        className={`
-                          h-10 w-10 rounded-full border-4 shadow-lg
-                          ${piece?.startsWith("white")
-                            ? "bg-white border-slate-300"
-                            : "bg-slate-900 border-slate-700"}
-                        `}
-                      >
-                        {piece?.includes("king") && (
-                          <div className="flex h-full items-center justify-center text-2xl font-bold text-amber-500">
-                            ♛
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {isValidTarget && !piece && (
-                      <div className="h-3 w-3 rounded-full bg-green-500 opacity-60" />
-                    )}
-                  </button>
-                );
-              })
-            )}
-          </div>
-        </div>
-
-        {isGameOver && (
-          <div className="mt-6 text-center">
-            <button
-              onClick={handleNewGame}
-              className="rounded-lg bg-green-600 px-8 py-3 font-bold text-white transition hover:bg-green-700"
-            >
-              Novo Jogo
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
+        {gameOver ? (
+          <ResultBanner
+            winner={state.winner}
+            reason={state.reason === "all_captured" ? "todas as peças capturadas" : state.reason}
+            opponentName="A máquina"
+            onRestart={restart}
+          />
+        ) : null}
+      </TablePanel>
+    </GameShell>
   );
 }

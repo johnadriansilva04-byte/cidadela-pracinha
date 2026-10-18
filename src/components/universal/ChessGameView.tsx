@@ -1,160 +1,273 @@
-import { useState } from "react";
-import { BackButton } from "@/components/BackButton";
-import { UniversalGameFactory } from "@/lib/universal/UniversalGameFactory";
-import { MCTS } from "@/lib/ai/MCTS";
+/**
+ * Mesa de XADREZ.
+ *
+ * Tabuleiro 8x8 com coordenadas, destaque de jogadas legais, última jogada,
+ * xeque, promoção de peão e adversário controlado por MCTS.
+ */
+import { useCallback, useMemo, useState } from "react";
+import { ChessAdapter, type ChessMove, type ChessState } from "@/lib/universal/adapters/ChessAdapter";
+import { decidirJogada, jogadaComImperfeicao, type AiLevel } from "@/lib/universal/aiUniversal";
+import { GameShell, ResultBanner, TablePanel } from "./GameShell";
 
 interface ChessGameViewProps {
   onBack: () => void;
 }
 
-const PIECE_SYMBOLS: Record<string, string> = {
-  white_king: "♔",
-  white_queen: "♕",
-  white_rook: "♖",
-  white_bishop: "♗",
-  white_knight: "♘",
-  white_pawn: "♙",
-  black_king: "♚",
-  black_queen: "♛",
-  black_rook: "♜",
-  black_bishop: "♝",
-  black_knight: "♞",
-  black_pawn: "♟",
+const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"];
+const RANKS = ["8", "7", "6", "5", "4", "3", "2", "1"];
+
+/** Símbolo unicode por cor+tipo. */
+const SYMBOLS: Record<string, string> = {
+  wk: "♔",
+  wq: "♕",
+  wr: "♖",
+  wb: "♗",
+  wn: "♘",
+  wp: "♙",
+  bk: "♚",
+  bq: "♛",
+  br: "♜",
+  bb: "♝",
+  bn: "♞",
+  bp: "♟",
 };
 
+const PROMOTION_LABEL: Record<string, string> = { q: "Rainha", r: "Torre", b: "Bispo", n: "Cavalo" };
+
 export function ChessGameView({ onBack }: ChessGameViewProps) {
-  const [gameState, setGameState] = useState(() =>
-    UniversalGameFactory.createGame("board_chess", 2)
+  const engine = useMemo(() => new ChessAdapter(), []);
+  const [level, setLevel] = useState<AiLevel>("medio");
+  const [state, setState] = useState<ChessState>(() => engine.initializeGame("board_chess", 2));
+  const [selected, setSelected] = useState<string | null>(null);
+  const [thinking, setThinking] = useState(false);
+  /** Promoção pendente: guarda a jogada até o jogador escolher a peça. */
+  const [promotion, setPromotion] = useState<{ from: string; to: string } | null>(null);
+  const [restartKey, setRestartKey] = useState(0);
+
+  const grid = state.customState.grid;
+  const gameOver = state.gameOver;
+  const humanTurn = state.currentPlayer === 0 && !gameOver;
+
+  const legalMoves = useMemo(
+    () => (gameOver ? [] : engine.getValidMoves(state)),
+    [engine, state, gameOver],
   );
-  const [selectedSquare, setSelectedSquare] = useState<[number, number] | null>(null);
-  const [isAIThinking, setIsAIThinking] = useState(false);
 
-  const engine = UniversalGameFactory.createEngine("board_chess");
-  const validMoves = engine.getValidMoves(gameState);
-  const isGameOver = engine.isGameOver(gameState);
-  const winner = isGameOver ? engine.getWinner(gameState) : null;
-
-  const board = gameState.board as Array<Array<string | null>>;
-
-  const getValidMovesForSquare = (row: number, col: number) => {
-    return validMoves.filter((move: any) => move.from[0] === row && move.from[1] === col);
-  };
-
-  const handleSquareClick = (row: number, col: number) => {
-    if (isGameOver || isAIThinking) return;
-
-    const piece = board[row][col];
-    const pieceColor = piece?.startsWith("white") ? "white" : piece?.startsWith("black") ? "black" : null;
-    const isCurrentPlayerPiece = pieceColor === (gameState.currentPlayer === 0 ? "white" : "black");
-
-    if (selectedSquare) {
-      const [fromRow, fromCol] = selectedSquare;
-      const moves = getValidMovesForSquare(fromRow, fromCol);
-      const targetMove = moves.find((m: any) => m.to[0] === row && m.to[1] === col);
-
-      if (targetMove) {
-        const newState = engine.applyMove(gameState, targetMove);
-        setGameState(newState);
-        setSelectedSquare(null);
-
-        // AI move
-        if (!engine.isGameOver(newState)) {
-          setIsAIThinking(true);
-          setTimeout(() => {
-            const mcts = new MCTS(engine, { maxIterations: 3000, timeBudgetMs: 1500 });
-            const aiMove = mcts.computeMove(newState, 1);
-            const finalState = engine.applyMove(newState, aiMove.move);
-            setGameState(finalState);
-            setIsAIThinking(false);
-          }, 300);
-        }
-      } else if (isCurrentPlayerPiece) {
-        setSelectedSquare([row, col]);
-      } else {
-        setSelectedSquare(null);
-      }
-    } else if (isCurrentPlayerPiece) {
-      setSelectedSquare([row, col]);
+  /** Destinos legais da peça selecionada. */
+  const targets = useMemo(() => {
+    if (!selected) return new Map<string, ChessMove>();
+    const map = new Map<string, ChessMove>();
+    for (const raw of legalMoves) {
+      const move = raw as ChessMove;
+      if (move.data.from === selected) map.set(move.data.to, move);
     }
-  };
+    return map;
+  }, [selected, legalMoves]);
 
-  const handleNewGame = () => {
-    setGameState(UniversalGameFactory.createGame("board_chess", 2));
-    setSelectedSquare(null);
-  };
+  const lastMoveSquares = useMemo(() => {
+    const last = state.lastMove as ChessMove | null;
+    if (!last) return new Set<string>();
+    return new Set([last.data.from, last.data.to]);
+  }, [state.lastMove]);
 
-  const isLightSquare = (row: number, col: number) => (row + col) % 2 === 0;
+  const restart = useCallback(() => {
+    setState(engine.initializeGame("board_chess", 2));
+    setSelected(null);
+    setPromotion(null);
+    setThinking(false);
+    setRestartKey((k) => k + 1);
+  }, [engine]);
+
+  /** Executa a jogada e, se for a vez da máquina, responde. */
+  const jogar = useCallback(
+    (move: ChessMove) => {
+      const after = engine.applyMove(state, move) as ChessState;
+      setState(after);
+      setSelected(null);
+
+      if (after.gameOver) return;
+      if (after.currentPlayer !== 1) return;
+
+      setThinking(true);
+      // Adia o cálculo para o navegador pintar a jogada do humano primeiro.
+      window.setTimeout(() => {
+        const decision = jogadaComImperfeicao(engine, after, 1, level);
+        if (decision.move) {
+          setState(engine.applyMove(after, decision.move) as ChessState);
+        }
+        setThinking(false);
+      }, 60);
+    },
+    [engine, state, level],
+  );
+
+  const handleSquareClick = useCallback(
+    (square: string) => {
+      if (!humanTurn || thinking || promotion) return;
+
+      const piece = grid[Number(square.split("-")[1])]?.[Number(square.split("-")[0])] ?? null;
+
+      // Clique em destino válido: joga.
+      const target = targets.get(square);
+      if (selected && target) {
+        if (target.data.promotion) {
+          setPromotion({ from: target.data.from, to: target.data.to });
+          return;
+        }
+        jogar(target);
+        return;
+      }
+
+      // Clique na própria peça: seleciona (ou desseleciona).
+      if (piece && piece[0] === "w") {
+        setSelected((prev) => (prev === square ? null : square));
+        return;
+      }
+
+      setSelected(null);
+    },
+    [grid, humanTurn, thinking, promotion, selected, targets, jogar],
+  );
+
+  const confirmPromotion = useCallback(
+    (pieceType: string) => {
+      if (!promotion) return;
+      const move = legalMoves.find((raw) => {
+        const m = raw as ChessMove;
+        return m.data.from === promotion.from && m.data.to === promotion.to && m.data.promotion === pieceType;
+      }) as ChessMove | undefined;
+      setPromotion(null);
+      if (move) jogar(move);
+    },
+    [promotion, legalMoves, jogar],
+  );
+
+  const statusText = gameOver
+    ? state.reason === "checkmate"
+      ? "Xeque-mate"
+      : state.reason === "stalemate"
+        ? "Afogamento — empate"
+        : "Partida encerrada"
+    : humanTurn
+      ? "Sua vez (brancas)"
+      : "Vez das pretas";
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 p-4">
-      <BackButton onClick={onBack} />
-      <div className="mx-auto max-w-4xl">
-        <h1 className="mb-6 text-center text-3xl font-bold text-white">Xadrez</h1>
+    <GameShell
+      key={restartKey}
+      title="Xadrez"
+      subtitle="Você joga com as brancas"
+      onBack={onBack}
+      onRestart={restart}
+      level={level}
+      onLevelChange={setLevel}
+      usesMCTS
+      thinking={thinking}
+      status={
+        <>
+          <span className="font-semibold">{statusText}</span>
+          {state.customState.check && !gameOver ? (
+            <span className="rounded-md border border-rose-400/50 bg-rose-500/15 px-2 py-0.5 text-xs font-bold text-rose-200">
+              Xeque!
+            </span>
+          ) : null}
+          <span className="ml-auto text-xs text-muted-foreground">
+            {state.moveHistory.length} lances
+          </span>
+        </>
+      }
+      footer="Toque numa peça e depois no destino. Peões promovem ao chegar na última linha."
+    >
+      <TablePanel>
+        <div className="mx-auto grid max-w-[min(92vw,34rem)] grid-cols-8 overflow-hidden rounded-xl border-2 border-amber-900/70">
+          {RANKS.map((rank, row) =>
+            FILES.map((file, col) => {
+              const square = `${col}-${row}`;
+              const piece = grid[row]?.[col] ?? null;
+              const isDark = (row + col) % 2 === 1;
+              const isSelected = selected === square;
+              const isTarget = targets.has(square);
+              const isLast = lastMoveSquares.has(square);
+              const isCapture = isTarget && piece !== null;
 
-        <div className="mb-4 rounded-lg bg-slate-800 p-4 text-white">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-slate-300">
-              Turno: <span className="font-bold text-white">{gameState.currentPlayer === 0 ? "Brancas" : "Pretas"}</span>
-            </p>
-            {isAIThinking && (
-              <p className="text-sm text-yellow-400">IA pensando...</p>
-            )}
-          </div>
-          {isGameOver && (
-            <p className="mt-2 text-lg font-bold text-green-400">
-              {winner === null ? "Empate!" : winner === 0 ? "Brancas venceram!" : "Pretas venceram!"}
-            </p>
+              return (
+                <button
+                  key={square}
+                  onClick={() => handleSquareClick(square)}
+                  disabled={!humanTurn || thinking}
+                  aria-label={`${file}${rank}${piece ? ` ${piece}` : ""}`}
+                  className={`relative flex aspect-square items-center justify-center text-2xl leading-none transition-colors sm:text-3xl md:text-4xl ${
+                    isDark ? "bg-amber-800/80" : "bg-amber-200/85"
+                  } ${isSelected ? "ring-2 ring-inset ring-emerald-400" : ""} ${
+                    isLast ? "outline outline-2 -outline-offset-2 outline-sky-400/70" : ""
+                  } ${humanTurn && !thinking ? "cursor-pointer hover:brightness-110" : "cursor-default"}`}
+                >
+                  {piece ? (
+                    <span
+                      className={
+                        piece[0] === "w"
+                          ? "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]"
+                          : "text-slate-900 drop-shadow-[0_1px_1px_rgba(255,255,255,0.35)]"
+                      }
+                    >
+                      {SYMBOLS[piece] ?? piece}
+                    </span>
+                  ) : null}
+
+                  {/* Marca de destino: ponto quando vazio, anel quando captura */}
+                  {isTarget ? (
+                    isCapture ? (
+                      <span className="pointer-events-none absolute inset-0 rounded-sm ring-4 ring-inset ring-rose-500/70" />
+                    ) : (
+                      <span className="pointer-events-none absolute h-2.5 w-2.5 rounded-full bg-emerald-400/80 sm:h-3 sm:w-3" />
+                    )
+                  ) : null}
+
+                  {/* Coordenadas nas bordas */}
+                  {col === 0 ? (
+                    <span className="pointer-events-none absolute left-0.5 top-0.5 text-[9px] font-bold opacity-60">
+                      {rank}
+                    </span>
+                  ) : null}
+                  {row === 7 ? (
+                    <span className="pointer-events-none absolute bottom-0.5 right-0.5 text-[9px] font-bold opacity-60">
+                      {file}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            }),
           )}
         </div>
 
-        <div className="mx-auto max-w-md">
-          <div className="grid aspect-square grid-cols-8 rounded-lg overflow-hidden shadow-2xl">
-            {board.map((row, rowIndex) =>
-              row.map((piece, colIndex) => {
-                const isSelected = selectedSquare?.[0] === rowIndex && selectedSquare?.[1] === colIndex;
-                const validMoves = selectedSquare ? getValidMovesForSquare(selectedSquare[0], selectedSquare[1]) : [];
-                const isValidTarget = validMoves.some((m: any) => m.to[0] === rowIndex && m.to[1] === colIndex);
-
-                return (
-                  <button
-                    key={`${rowIndex}-${colIndex}`}
-                    onClick={() => handleSquareClick(rowIndex, colIndex)}
-                    disabled={isGameOver || isAIThinking}
-                    className={`
-                      flex aspect-square items-center justify-center text-4xl md:text-5xl
-                      transition-all duration-150
-                      ${isLightSquare(rowIndex, colIndex) ? "bg-amber-100" : "bg-amber-700"}
-                      ${isSelected ? "bg-blue-400!" : ""}
-                      ${isValidTarget ? "bg-green-400!" : ""}
-                      ${!isGameOver && !isAIThinking ? "hover:opacity-80" : "cursor-not-allowed"}
-                    `}
-                  >
-                    {piece && (
-                      <span className={piece?.startsWith("white") ? "text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]" : "text-black"}>
-                        {PIECE_SYMBOLS[piece] || piece}
-                      </span>
-                    )}
-                    {isValidTarget && !piece && (
-                      <div className="h-3 w-3 rounded-full bg-green-500 opacity-60" />
-                    )}
-                  </button>
-                );
-              })
-            )}
+        {/* Diálogo de promoção */}
+        {promotion ? (
+          <div className="mt-3 rounded-2xl border border-amber-400/50 bg-amber-500/10 p-3">
+            <p className="mb-2 text-center text-sm font-semibold">Promover peão para:</p>
+            <div className="flex flex-wrap justify-center gap-2">
+              {(["q", "r", "b", "n"] as const).map((pieceType) => (
+                <button
+                  key={pieceType}
+                  onClick={() => confirmPromotion(pieceType)}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-border/60 bg-background/80 px-3 py-2 text-sm font-semibold transition-all hover:border-primary/50 hover:bg-primary/10 active:scale-95"
+                >
+                  <span className="text-xl">{SYMBOLS[`w${pieceType}`]}</span>
+                  {PROMOTION_LABEL[pieceType]}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        ) : null}
 
-        {isGameOver && (
-          <div className="mt-6 text-center">
-            <button
-              onClick={handleNewGame}
-              className="rounded-lg bg-green-600 px-8 py-3 font-bold text-white transition hover:bg-green-700"
-            >
-              Novo Jogo
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
+        {gameOver ? (
+          <ResultBanner
+            winner={state.winner}
+            reason={state.reason}
+            opponentName="As pretas"
+            onRestart={restart}
+          />
+        ) : null}
+      </TablePanel>
+    </GameShell>
   );
 }

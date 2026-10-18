@@ -1,3 +1,101 @@
+## 4 jogos novos + reserva de orçamento do MCTS (2026-10-18, 34ª passada)
+
+Pedido do dono: "arrume os jogos, add mais". O motor universal declarava ~63
+categorias e só 5 estavam implementadas. Agora são **9**.
+
+- **Jogos novos** (adaptador + view + card na Cidadela): **Liga 4**
+  (`board_connect_four`), **Jogo da Velha** (`board_tic_tac_toe`),
+  **Reversi** (`board_reversi`) e **Mancala** (`board_mancala`). Cada um segue o
+  padrão do motor: `src/lib/universal/adapters/XAdapter.ts` (regras + `evaluate`
+  + `suggestMove`), registro em `ADAPTERS`/`PLAYABLE` do
+  `UniversalGameFactory.ts`, view em `src/components/universal/XGameView.tsx`
+  (só o tabuleiro; `GameShell` dá header/dificuldade/status) e rota em
+  `src/routes/cidadela.tsx` (tipo `Game`, card em `GAMES`, despacho e render).
+  A IA vem de graça pelo MCTS genérico — nenhum adaptador tem IA própria.
+- **Armadilha do motor (vale para todo adaptador novo)**: `GamePiece` usa
+  `data` (não `customData`) e `PieceType`/`MoveType` são uniões fechadas
+  (`"token"`, `"stone"`, `"play"`, `"pass"`, ...). Tipo fora da união = erro TS.
+- **BUG GRAVE no MCTS — a verificação negamax NUNCA rodava no Difícil**:
+  `verifyDeadline` era fixado no MESMO instante do fim do orçamento que a busca
+  já havia consumido por inteiro. Como o Difícil (`maxIterations: 40000`) sempre
+  satura o relógio, `verifyRoot` abortava na primeira checagem; o Fácil, que
+  termina antes do prazo, ainda ganhava a checagem — **o Difícil jogava PIOR que
+  o Fácil** (medido: Difícil 2 x 3 Fácil na Liga 4). Fix: `verifyTimeShare`
+  (padrão 0.25) — a busca para em `timeBudgetMs * (1 - share)` e a verificação
+  usa o restante. Medido depois: Difícil 1800ms → ~1360ms de busca + verificação
+  ativa; Fácil/Médio intactos; latência continua dentro do orçamento.
+- **Guarda de força nova** em `testes/motores-universais.mts`: Difícil tem de
+  vencer o Fácil na Liga 4. ATENÇÃO: a guarda usa `jogadaComImperfeicao` (o
+  caminho REAL da UI, que aplica o `blunder` dos níveis baixos) — com
+  `decidirJogada` os dois lados jogam perfeito e a guarda mede outra coisa.
+- **Verificação**: tsc 0; `motores-universais` 57/57; `render-jogos` 63/63;
+  build OK; E2E navegador `testes/e2e-jogos.mjs` **39/39 com 0 erros de
+  console** (as 9 mesas abrem, aceitam jogada e nenhum overlay cobre o
+  tabuleiro); `bench-forca` general vs recruta/sargento 100% (intacto).
+
+
+## IA dos jogos de tabuleiro — MCTS + verificação negamax (2026-10-18, 33ª passada)
+
+Queixa do dono: "a IA do nível Difícil não vence os níveis baixos". Causa raiz
+era o **rollout**, não o UCB1 nem a classe `Node`. Medido com sondas descartáveis
+em `testes/probe-*.mts` (removidas depois; o que fica é `testes/motores-universais.mts`
++ `testes/bench-forca.mts` + `testes/e2e-jogos.mjs`).
+
+- **BUG 1 — orçamento de tempo ignorado (travava a UI)**: uma iteração do MCTS
+  podia estourar o orçamento inteiro. Xadrez "Fácil" (250ms) rodava **4306ms**.
+  Fix: `deadline` no MCTS checado DENTRO do rollout. Agora 253ms.
+- **BUG 2 — rollout heurístico jogava PIOR que o aleatório**: `pickRolloutMove`
+  avaliava cada lance candidato (`applyMove` + `evaluate`) em cada ply, custando
+  ~1,5ms/ply. Cabiam **7 simulações** contra **51** do rollout aleatório no
+  mesmo orçamento — e perdia de 0V-6D para a jogada aleatória. Fix: rollout
+  ALEATÓRIO por padrão (`useHeuristicRollout: false`). O rollout barato rende
+  mais simulações; a qualidade tática vem da verificação.
+- **BUG 3 — recompensa binária destruía o sinal**: no corte por profundidade,
+  `wonForPerspective: value > 0` convertia a heurística em "venci/não venci":
+  vantagem de 0,02 virava vitória cheia. Fix: `backpropagate(reward: number)`
+  contínuo em [0,1] e `simulate` devolvendo `sigmoid(value, rolloutValueScale)`.
+- **BUG 4 — xadrez: geração de lances lenta**: `legalMoves` chamava `applyRaw`
+  (clone profundo `JSON.parse(JSON.stringify)`, 0,17ms) por pseudo-lance (~20×).
+  Fix: legalidade só na grade (`gridAfterMove`, `kingPosInGrid`, `isAttacked`).
+  **3,13ms → 0,087ms (36×)**; meio-jogo 4,2ms → 0,040ms (105×). Correção provada
+  por perft exato (20/400/8902) + teste diferencial (15360 comparações, 0
+  divergências) + roque (2 lances).
+- **A CORREÇÃO QUE RESOLVEU — verificação negamax na raiz (`verifyDepth`)**:
+  MCTS puro decide pela média de poucas simulações por lance, o que é ruído em
+  jogos de muitos lances legais. O MCTS passa a definir só a ORDEM (mais
+  simuladas primeiro → maximiza os cortes alfa-beta) e o negamax DECIDE, sobre
+  TODAS as jogadas legais. Mesma arquitetura do motor "General" da Trilha
+  (`src/lib/trilha/ai.ts`). Níveis: Fácil d1 / Médio d2 / Difícil d3.
+  Resultado: **Fácil/Médio/Difícil 6V-0D-0E contra a jogada aleatória** (antes
+  o General perdia). `bench-forca`: general vs recruta 6W, vs sargento 6W.
+- **`verifyDepth` PRECISA de teto de tempo**: o negamax da raiz roda depois do
+  orçamento do MCTS e é sem limite por natureza. Sem `verifyDeadline` o Difícil
+  do xadrez levava 2937ms para um orçamento de 1800ms. O prazo agora é checado
+  em `negamax` (corte com avaliação estática) e entre candidatos na raiz, e
+  `negamax` usa o prazo da BUSCA quando não há verificação — sem isso o prior de
+  expansão estourava o "Fácil" (423ms). Todos os níveis agora respeitam o
+  orçamento (≤0,4% de folga).
+- **BUG 5 — damas não tinha regra de empate**: sem ela dois reis se perseguem
+  para sempre e a partida NUNCA termina (a IA ficava em loop indefinido).
+  Adicionada a regra dos 40 lances (`halfMoveClock` + `DRAW_HALF_MOVES = 80`,
+  reinicia em captura ou coroação).
+- **BUG 6 — `promoted` estava errado nas damas**: era `ty === última fileira`,
+  ou seja, um rei andando na própria fileira "promovia" de novo a cada lance —
+  isso zerava o relógio de empate para sempre e ABORTAVA cadeias de captura de
+  reis. Agora é `!jaEraRei && chegouNaUltima` (coroou AGORA).
+- **Teste flaky corrigido**: `jogarPartida` usava `timeBudgetMs`, então o número
+  de simulações variava com a carga da máquina e o resultado da partida mudava
+  entre execuções. Agora usa `timeBudgetMs: 0` + `maxIterations` (determinístico)
+  e o teste de damas exige que a partida TERMINE (vitória OU empate), não que
+  haja vencedor — exigir vencedor era errado com a regra dos 40 lances.
+- **Verificação**: `tsc --noEmit` 0 erros; `npm run build` OK; motores-universais
+  35/35; render-jogos 35/35; e2e-jogos (navegador) 23/23 com 0 erros de console;
+  bench-forca general 100% vs recruta e sargento.
+- **Armadilha de medição**: sonda de força com `verifyDepth` só tem valor se o
+  MCTS construir o objeto com a opção — a primeira varredura usou um binário
+  antigo e reportou derrota que não existia. Conferir o resultado com o caminho
+  de PRODUÇÃO (`aiUniversal.decidirJogada`), não só com o MCTS cru.
+
 ## Módulo "Teste de QI" na home + UI profissional (2026-08-28, 32ª passada)
 
 - **Teste de QI movido para a HOME** (`/`): card "Teste de QI" (ícone brain,

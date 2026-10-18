@@ -1,214 +1,219 @@
-import { useState } from "react";
-import { BackButton } from "@/components/BackButton";
-import { UniversalGameFactory } from "@/lib/universal/UniversalGameFactory";
+/**
+ * Mesa de BLACKJACK (21).
+ *
+ * Fluxo em três etapas visíveis: apostar → pedir/parar → resultado.
+ * A segunda carta do dealer fica virada para baixo até a rodada ser liquidada,
+ * e o total de cada mão vem do motor (nunca é recalculado na UI).
+ */
+import { useCallback, useMemo, useState } from "react";
+import {
+  BlackjackAdapter,
+  type BlackjackCard,
+  type BlackjackState,
+} from "@/lib/universal/adapters/BlackjackAdapter";
+import { GameShell, TablePanel } from "./GameShell";
 
 interface BlackjackGameViewProps {
   onBack: () => void;
 }
 
-const SUIT_SYMBOLS: Record<string, string> = {
+const SUIT_SYMBOL: Record<string, string> = {
   hearts: "♥",
   diamonds: "♦",
   clubs: "♣",
   spades: "♠",
 };
 
-const SUIT_COLORS: Record<string, string> = {
-  hearts: "text-red-600",
-  diamonds: "text-red-600",
-  clubs: "text-slate-900",
-  spades: "text-slate-900",
+const OUTCOME_TEXT: Record<string, string> = {
+  win: "Você ganhou!",
+  blackjack: "Blackjack! Pagou 3:2",
+  lose: "A casa levou",
+  push: "Empate — aposta devolvida",
+  bust: "Estourou 21 — você perdeu",
 };
 
-const RANK_LABELS: Record<string, string> = {
-  ace: "A",
-  king: "K",
-  queen: "Q",
-  jack: "J",
-  "10": "10",
-  "9": "9",
-  "8": "8",
-  "7": "7",
-  "6": "6",
-  "5": "5",
-  "4": "4",
-  "3": "3",
-  "2": "2",
+const OUTCOME_TONE: Record<string, string> = {
+  win: "border-emerald-400/50 bg-emerald-500/15 text-emerald-200",
+  blackjack: "border-violet-400/50 bg-violet-500/15 text-violet-200",
+  lose: "border-rose-400/50 bg-rose-500/15 text-rose-200",
+  push: "border-amber-400/50 bg-amber-500/15 text-amber-200",
+  bust: "border-rose-400/50 bg-rose-500/15 text-rose-200",
 };
 
-function CardDisplay({ card, hidden = false }: { card: any; hidden?: boolean }) {
+/** Carta desenhada no tamanho da mesa. */
+function CardFace({ card, hidden = false }: { card: BlackjackCard; hidden?: boolean }) {
   if (hidden) {
     return (
-      <div className="h-32 w-24 rounded-lg bg-gradient-to-br from-blue-600 to-blue-800 shadow-lg border-2 border-blue-400 flex items-center justify-center">
-        <div className="text-3xl text-white font-bold">?</div>
+      <div className="flex h-20 w-14 items-center justify-center rounded-lg border-2 border-slate-500 bg-gradient-to-br from-indigo-800 to-slate-900 text-lg font-black text-indigo-300 shadow-lg sm:h-24 sm:w-16">
+        ?
       </div>
     );
   }
 
+  const red = card.suit === "hearts" || card.suit === "diamonds";
   return (
-    <div className="h-32 w-24 rounded-lg bg-white shadow-lg border-2 border-slate-300 flex flex-col items-center justify-center">
-      <div className={`text-3xl font-bold ${SUIT_COLORS[card.suit]}`}>
-        {RANK_LABELS[card.rank]}
-      </div>
-      <div className={`text-4xl ${SUIT_COLORS[card.suit]}`}>
-        {SUIT_SYMBOLS[card.suit]}
-      </div>
+    <div
+      className={`flex h-20 w-14 flex-col justify-between rounded-lg border border-slate-300 bg-white p-1.5 shadow-lg sm:h-24 sm:w-16 ${
+        red ? "text-rose-600" : "text-slate-900"
+      }`}
+    >
+      <span className="text-sm font-black leading-none sm:text-base">{card.rank}</span>
+      <span className="self-end text-lg leading-none sm:text-xl">{SUIT_SYMBOL[card.suit]}</span>
     </div>
   );
 }
 
-function calculateHandValue(cards: any[]) {
-  let value = 0;
-  let aces = 0;
-
-  for (const card of cards) {
-    if (card.rank === "ace") {
-      aces += 1;
-      value += 11;
-    } else if (["king", "queen", "jack"].includes(card.rank)) {
-      value += 10;
-    } else {
-      value += parseInt(card.rank, 10);
-    }
-  }
-
-  while (value > 21 && aces > 0) {
-    value -= 10;
-    aces -= 1;
-  }
-
-  return value;
-}
-
 export function BlackjackGameView({ onBack }: BlackjackGameViewProps) {
-  const [gameState, setGameState] = useState(() =>
-    UniversalGameFactory.createGame("card_blackjack", 2)
+  const engine = useMemo(() => new BlackjackAdapter(), []);
+  const [state, setState] = useState<BlackjackState>(() => engine.initializeGame("card_blackjack", 2));
+  const [restartKey, setRestartKey] = useState(0);
+
+  const cs = state.customState;
+  const phase = state.phase;
+
+  const bets = useMemo(() => engine.getValidMoves(state), [engine, state]);
+
+  const restart = useCallback(() => {
+    setState(engine.initializeGame("card_blackjack", 2));
+    setRestartKey((k) => k + 1);
+  }, [engine]);
+
+  /** Aplica uma jogada pelo `action` do payload. */
+  const jogar = useCallback(
+    (action: string, amount?: number) => {
+      const move = engine
+        .getValidMoves(state)
+        .find((m) => m.data["action"] === action && (amount === undefined || Number(m.data["amount"]) === amount));
+      if (!move) return;
+      setState(engine.applyMove(state, move) as BlackjackState);
+    },
+    [engine, state],
   );
-  const [isGameOver, setIsGameOver] = useState(false);
 
-  const engine = UniversalGameFactory.createEngine("card_blackjack");
-  const validMoves = engine.getValidMoves(gameState);
+  const dealerHidden = phase === "playing";
+  const outcome = cs.outcome;
 
-  const playerHand = gameState.hands?.[0] || [];
-  const dealerHand = gameState.hands?.[1] || [];
-  const playerValue = calculateHandValue(playerHand);
-  const dealerValue = calculateHandValue(dealerHand);
-
-  const handleHit = () => {
-    const hitMove = validMoves.find((m: any) => m.action === "hit");
-    if (hitMove) {
-      const newState = engine.applyMove(gameState, hitMove);
-      setGameState(newState);
-
-      const newPlayerHand = newState.hands?.[0] || [];
-      const newPlayerValue = calculateHandValue(newPlayerHand);
-
-      if (newPlayerValue > 21) {
-        setIsGameOver(true);
-      }
-    }
-  };
-
-  const handleStand = () => {
-    const standMove = validMoves.find((m: any) => m.action === "stand");
-    if (standMove) {
-      const newState = engine.applyMove(gameState, standMove);
-      setGameState(newState);
-      setIsGameOver(true);
-    }
-  };
-
-  const handleNewGame = () => {
-    setGameState(UniversalGameFactory.createGame("card_blackjack", 2));
-    setIsGameOver(false);
-  };
-
-  const determineWinner = () => {
-    if (playerValue > 21) return "Dealer venceu!";
-    if (dealerValue > 21) return "Você venceu!";
-    if (playerValue > dealerValue) return "Você venceu!";
-    if (dealerValue > playerValue) return "Dealer venceu!";
-    return "Empate!";
-  };
+  const statusText =
+    phase === "betting"
+      ? "Faça sua aposta"
+      : phase === "playing"
+        ? cs.playerTotal > 21
+          ? "Estourou!"
+          : "Pede carta ou para?"
+        : phase === "settled"
+          ? (OUTCOME_TEXT[outcome ?? ""] ?? "Rodada encerrada")
+          : "Aguardando";
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-green-900 to-green-800 p-4">
-      <BackButton onClick={onBack} />
-      <div className="mx-auto max-w-4xl">
-        <h1 className="mb-6 text-center text-3xl font-bold text-white">Blackjack</h1>
-
-        <div className="space-y-6">
-          {/* Dealer */}
-          <div className="rounded-lg bg-green-950/50 p-6">
-            <h2 className="mb-4 text-xl font-bold text-white">Dealer</h2>
-            <div className="flex gap-3 flex-wrap">
-              {dealerHand.map((card: any, index: number) => (
-                <CardDisplay
-                  key={index}
-                  card={card}
-                  hidden={!isGameOver && index === 1}
-                />
-              ))}
-            </div>
-            {isGameOver && (
-              <p className="mt-2 text-lg font-bold text-white">
-                Total: {dealerValue}
-              </p>
+    <GameShell
+      key={restartKey}
+      title="Blackjack"
+      subtitle="Chegue a 21 sem estourar — o dealer para no 17"
+      onBack={onBack}
+      onRestart={restart}
+      status={
+        <>
+          <span className="font-semibold">{statusText}</span>
+          <span className="ml-auto inline-flex items-center gap-1.5 text-xs font-semibold text-amber-300">
+            🪙 {cs.chips}
+          </span>
+        </>
+      }
+      footer="Blackjack natural (21 em duas cartas) paga 3:2. Empate devolve a aposta."
+    >
+      <TablePanel className="bg-gradient-to-b from-emerald-900/80 to-emerald-950/90">
+        {/* Mão do dealer */}
+        <div className="mb-4">
+          <div className="mb-1.5 flex items-baseline gap-2">
+            <span className="text-xs font-bold uppercase tracking-wide text-emerald-200/80">Dealer</span>
+            <span className="text-lg font-black text-white">
+              {dealerHidden ? cs.dealerHand[0]?.value ?? 0 : cs.dealerTotal}
+              {dealerHidden ? " + ?" : ""}
+            </span>
+          </div>
+          <div className="flex min-h-[5rem] flex-wrap gap-2 sm:min-h-[6rem]">
+            {cs.dealerHand.length === 0 ? (
+              <span className="self-center text-xs text-emerald-200/50">sem cartas</span>
+            ) : (
+              cs.dealerHand.map((card, i) => (
+                <CardFace key={`d-${i}`} card={card} hidden={!card.faceUp} />
+              ))
             )}
           </div>
+        </div>
 
-          {/* Player */}
-          <div className="rounded-lg bg-green-950/50 p-6">
-            <h2 className="mb-4 text-xl font-bold text-white">Você</h2>
-            <div className="flex gap-3 flex-wrap">
-              {playerHand.map((card: any, index: number) => (
-                <CardDisplay key={index} card={card} />
-              ))}
-            </div>
-            <p className="mt-2 text-lg font-bold text-white">
-              Total: {playerValue}
-            </p>
+        <div className="my-3 border-t border-emerald-400/20" />
+
+        {/* Mão do jogador */}
+        <div>
+          <div className="mb-1.5 flex items-baseline gap-2">
+            <span className="text-xs font-bold uppercase tracking-wide text-emerald-200/80">Você</span>
+            <span className="text-lg font-black text-white">{cs.playerTotal}</span>
+            {cs.bet > 0 ? (
+              <span className="text-xs text-amber-300">aposta {cs.bet}</span>
+            ) : null}
           </div>
+          <div className="flex min-h-[5rem] flex-wrap gap-2 sm:min-h-[6rem]">
+            {cs.playerHand.length === 0 ? (
+              <span className="self-center text-xs text-emerald-200/50">sem cartas</span>
+            ) : (
+              cs.playerHand.map((card, i) => <CardFace key={`p-${i}`} card={card} />)
+            )}
+          </div>
+        </div>
 
-          {/* Game Status */}
-          {isGameOver && (
-            <div className="rounded-lg bg-slate-800 p-6 text-center">
-              <p className="text-2xl font-bold text-yellow-400">
-                {determineWinner()}
+        {/* Controles */}
+        <div className="mt-5">
+          {phase === "betting" ? (
+            <div>
+              <p className="mb-2 text-center text-xs font-semibold uppercase tracking-wide text-emerald-200/70">
+                Escolha a aposta
               </p>
+              <div className="flex flex-wrap justify-center gap-2">
+                {bets.map((move) => (
+                  <button
+                    key={String(move.data["amount"])}
+                    onClick={() => jogar("bet", Number(move.data["amount"]))}
+                    className="rounded-xl border border-amber-400/60 bg-amber-500/15 px-4 py-2.5 text-sm font-bold text-amber-100 transition-all hover:bg-amber-500/25 active:scale-95"
+                  >
+                    🪙 {String(move.data["amount"])}
+                  </button>
+                ))}
+              </div>
             </div>
-          )}
-
-          {/* Controls */}
-          {!isGameOver && (
-            <div className="flex gap-4 justify-center">
+          ) : phase === "playing" ? (
+            <div className="flex justify-center gap-3">
               <button
-                onClick={handleHit}
-                className="rounded-lg bg-blue-600 px-8 py-3 font-bold text-white transition hover:bg-blue-700"
+                onClick={() => jogar("hit")}
+                disabled={cs.playerTotal >= 21}
+                className="rounded-xl border border-emerald-400/60 bg-emerald-500/20 px-6 py-2.5 text-sm font-bold text-emerald-100 transition-all hover:bg-emerald-500/30 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                Pedir Carta
+                Pedir carta
               </button>
               <button
-                onClick={handleStand}
-                className="rounded-lg bg-red-600 px-8 py-3 font-bold text-white transition hover:bg-red-700"
+                onClick={() => jogar("stand")}
+                className="rounded-xl border border-rose-400/60 bg-rose-500/20 px-6 py-2.5 text-sm font-bold text-rose-100 transition-all hover:bg-rose-500/30 active:scale-95"
               >
                 Parar
               </button>
             </div>
-          )}
-
-          {isGameOver && (
-            <div className="text-center">
+          ) : (
+            <div className="flex flex-col items-center gap-3">
+              {outcome ? (
+                <div className={`rounded-2xl border px-4 py-2 text-sm font-bold ${OUTCOME_TONE[outcome] ?? ""}`}>
+                  {OUTCOME_TEXT[outcome] ?? outcome}
+                </div>
+              ) : null}
               <button
-                onClick={handleNewGame}
-                className="rounded-lg bg-green-600 px-8 py-3 font-bold text-white transition hover:bg-green-700"
+                onClick={() => jogar("new-round")}
+                className="rounded-xl border border-border/60 bg-background/80 px-6 py-2.5 text-sm font-bold transition-all hover:border-primary/50 hover:bg-primary/10 active:scale-95"
               >
-                Novo Jogo
+                Nova rodada
               </button>
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </TablePanel>
+    </GameShell>
   );
 }

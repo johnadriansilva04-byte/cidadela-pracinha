@@ -1,59 +1,52 @@
 /**
- * Adaptador que implementa a interface GameEngine para o jogo de Trilha.
- * Permite que a Trilha use a IA genérica (MCTS, Minimax, etc.) do sistema.
+ * Ponte entre o motor da Trilha (Nine Men's Morris) e a IA genérica
+ * (`GameEngine` → MCTS/Minimax).
+ *
+ * O motor da Trilha já é imutável (`applyMove` clona), determinístico e
+ * serializável — os requisitos exatos do contrato. Aqui só adaptamos nomes e
+ * filtramos a jogada ambígua do "fechar trilha sem capturar".
  */
-import { GameEngine, GameState, Move } from "@/lib/ai/GameEngine";
+import type { GameEngine } from "@/lib/ai/GameEngine";
 import {
-  GameState as TrilhaState,
-  Move as TrilhaMove,
-  generateMoves,
   applyMove,
-  opponent,
-  evaluate as trilhaEvaluate,
+  evaluate,
+  generateMoves,
+  type GameState,
+  type Move,
+  type Player,
 } from "./engine";
 
-export class TrilhaAdapter implements GameEngine<TrilhaState, TrilhaMove> {
-  /**
-   * Retorna todas as jogadas legais para o estado atual.
-   */
-  getValidMoves(state: TrilhaState): TrilhaMove[] {
+/** Chave estável da jogada — deduplica o mesmo lance na árvore. */
+export function trilhaMoveKey(move: Move): string {
+  return `${move.from ?? "p"}>${move.to}${move.remove === null ? "" : `x${move.remove}`}`;
+}
+
+export class TrilhaAdapter implements GameEngine<GameState, Move> {
+  getValidMoves(state: GameState): Move[] {
     return generateMoves(state);
   }
 
-  /**
-   * Aplica uma jogada ao estado e retorna o novo estado.
-   * O engine da Trilha já implementa imutabilidade via cloneState.
-   */
-  applyMove(state: TrilhaState, move: TrilhaMove): TrilhaState {
+  applyMove(state: GameState, move: Move): GameState {
     return applyMove(state, move);
   }
 
-  /**
-   * Verifica se o jogo terminou.
-   */
-  isGameOver(state: TrilhaState): boolean {
+  isGameOver(state: GameState): boolean {
     return state.phase === "over";
   }
 
-  /**
-   * Retorna o vencedor do jogo (1 ou 2), null se não acabou.
-   */
-  getWinner(state: TrilhaState): number | null {
+  getWinner(state: GameState): number | null {
     return state.winner;
   }
 
-  /**
-   * Avaliação heurística do estado para um jogador específico.
-   * Reutiliza a função evaluate() existente do ai.ts da Trilha.
-   */
-  evaluate(state: TrilhaState, player: number): number {
-    return trilhaEvaluate(state, player);
+  evaluate(state: GameState, player: number): number {
+    return evaluate(state, player as Player);
   }
 
-  /**
-   * Retorna o jogador que deve jogar no estado atual.
-   */
-  getCurrentPlayer(state: TrilhaState): number {
+  getCurrentPlayer(state: GameState): number {
     return state.turn;
+  }
+
+  moveKey(move: Move): string {
+    return trilhaMoveKey(move);
   }
 }

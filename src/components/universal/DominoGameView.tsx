@@ -1,221 +1,276 @@
-import { useState } from "react";
-import { BackButton } from "@/components/BackButton";
-import { UniversalGameFactory } from "@/lib/universal/UniversalGameFactory";
-import { MCTS } from "@/lib/ai/MCTS";
+/**
+ * Mesa de DOMINÓ.
+ *
+ * Mostra a mão do jogador, a mesa em corrente e as extremidades abertas.
+ * A peça só é jogada se encaixar numa ponta — a UI filtra pela extremidade e
+ * indica visualmente onde a peça vai entrar.
+ */
+import { useCallback, useMemo, useState } from "react";
+import { DominoAdapter, type DominoState, type DominoTile } from "@/lib/universal/adapters/DominoAdapter";
+import { jogadaComImperfeicao, type AiLevel } from "@/lib/universal/aiUniversal";
+import { GameShell, ResultBanner, TablePanel } from "./GameShell";
 
 interface DominoGameViewProps {
   onBack: () => void;
 }
 
-function DominoTile({ left, right, onClick, clickable = false }: { left: number; right: number; onClick?: () => void; clickable?: boolean }) {
+/** Desenha uma peça com as duas metades de pontos. */
+function Tile({
+  tile,
+  onClick,
+  disabled = false,
+  selected = false,
+  horizontal = true,
+  small = false,
+}: {
+  tile: DominoTile;
+  onClick?: (() => void) | undefined;
+  disabled?: boolean | undefined;
+  selected?: boolean | undefined;
+  horizontal?: boolean | undefined;
+  small?: boolean | undefined;
+}) {
+  const w = small ? "w-9 sm:w-11" : "w-11 sm:w-14";
+  const h = small ? "h-[4.5rem] sm:h-20" : "h-[5.5rem] sm:h-24";
+
   return (
     <button
       onClick={onClick}
-      disabled={!clickable}
-      className={`
-        h-20 w-10 rounded bg-white shadow-lg border-2 border-slate-300
-        flex flex-col items-center justify-center gap-1
-        ${clickable ? "hover:scale-105 transition-transform cursor-pointer" : ""}
-      `}
+      disabled={disabled || !onClick}
+      className={`${w} ${h} flex shrink-0 flex-col overflow-hidden rounded-lg border-2 border-slate-300 bg-white shadow-md transition-all ${
+        selected ? "ring-2 ring-emerald-400" : ""
+      } ${onClick && !disabled ? "cursor-pointer hover:-translate-y-0.5 hover:shadow-lg active:scale-95" : "cursor-default"} ${
+        disabled ? "opacity-40" : ""
+      } ${horizontal ? "" : "rotate-90"}`}
+      aria-label={`${tile.left}-${tile.right}`}
     >
-      <div className="flex flex-col gap-0.5">
-        {Array.from({ length: left }).map((_, i) => (
-          <div key={`left-${i}`} className="h-1.5 w-1.5 rounded-full bg-slate-900" />
-        ))}
-      </div>
-      <div className="h-px w-6 bg-slate-300" />
-      <div className="flex flex-col gap-0.5">
-        {Array.from({ length: right }).map((_, i) => (
-          <div key={`right-${i}`} className="h-1.5 w-1.5 rounded-full bg-slate-900" />
-        ))}
-      </div>
+      <span className="flex flex-1 items-center justify-center border-b-2 border-slate-300 text-base font-black text-slate-900">
+        {tile.left}
+      </span>
+      <span className="flex flex-1 items-center justify-center text-base font-black text-slate-900">
+        {tile.right}
+      </span>
     </button>
   );
 }
 
 export function DominoGameView({ onBack }: DominoGameViewProps) {
-  const [gameState, setGameState] = useState(() =>
-    UniversalGameFactory.createGame("tile_domino", 2)
+  const engine = useMemo(() => new DominoAdapter(), []);
+  const [level, setLevel] = useState<AiLevel>("medio");
+  const [state, setState] = useState<DominoState>(() => engine.initializeGame("domino_block", 2));
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [thinking, setThinking] = useState(false);
+  const [restartKey, setRestartKey] = useState(0);
+
+  const cs = state.customState;
+  const gameOver = state.gameOver;
+  const myHand = cs.hands[0] ?? [];
+  const humanTurn = state.currentPlayer === 0 && !gameOver;
+  const table = cs.table;
+
+  const legalMoves = useMemo(
+    () => (gameOver ? [] : engine.getValidMoves(state)),
+    [engine, state, gameOver],
   );
-  const [selectedTile, setSelectedTile] = useState<number | null>(null);
-  const [isAIThinking, setIsAIThinking] = useState(false);
 
-  const engine = UniversalGameFactory.createEngine("tile_domino");
-  const validMoves = engine.getValidMoves(gameState);
-  const isGameOver = engine.isGameOver(gameState);
-  const winner = isGameOver ? engine.getWinner(gameState) : null;
+  const canDraw = legalMoves.some((m) => m.type === "draw");
+  const canPass = legalMoves.some((m) => m.type === "pass");
 
-  const board = gameState.board as Array<{ left: number; right: number }> || [];
-  const hands = gameState.hands as Array<Array<{ left: number; right: number }>> || [];
-  const playerHand = hands[0] || [];
-  const aiHand = hands[1] || [];
-
-  const handleTileClick = (tileIndex: number) => {
-    if (isGameOver || isAIThinking || gameState.currentPlayer !== 0) return;
-
-    if (selectedTile === tileIndex) {
-      setSelectedTile(null);
-    } else {
-      setSelectedTile(tileIndex);
+  /** Para cada peça da mão, em quais pontas ela encaixa. */
+  const playable = useMemo(() => {
+    const map = new Map<number, Array<"left" | "right">>();
+    for (const move of legalMoves) {
+      if (move.type !== "play") continue;
+      const index = Number(move.data["tileIndex"]);
+      const side = String(move.data["side"]) as "left" | "right";
+      const list = map.get(index) ?? [];
+      if (!list.includes(side)) list.push(side);
+      map.set(index, list);
     }
-  };
+    return map;
+  }, [legalMoves]);
 
-  const handleBoardEndClick = (end: "left" | "right") => {
-    if (selectedTile === null || isGameOver || isAIThinking) return;
+  const restart = useCallback(() => {
+    setState(engine.initializeGame("domino_block", 2));
+    setSelectedIndex(null);
+    setThinking(false);
+    setRestartKey((k) => k + 1);
+  }, [engine]);
 
-    const tile = playerHand[selectedTile];
-    const validMove = validMoves.find((m: any) =>
-      m.tileIndex === selectedTile && m.side === end
-    );
+  /** A máquina joga até devolver a vez ao humano. */
+  const vezDaMaquina = useCallback(
+    (base: DominoState) => {
+      setThinking(true);
+      window.setTimeout(() => {
+        let atual = base;
+        let guard = 0;
+        // Compra/passa podem devolver a vez ao mesmo jogador: repete até mudar.
+        while (!atual.gameOver && atual.currentPlayer === 1 && guard < 30) {
+          const decision = jogadaComImperfeicao(engine, atual, 1, level);
+          if (!decision.move) break;
+          const next = engine.applyMove(atual, decision.move) as DominoState;
+          atual = next;
+          guard++;
+          if (decision.move.type === "play") break;
+        }
+        setState(atual);
+        setThinking(false);
+      }, 80);
+    },
+    [engine, level],
+  );
 
-    if (validMove) {
-      const newState = engine.applyMove(gameState, validMove);
-      setGameState(newState);
-      setSelectedTile(null);
+  const jogar = useCallback(
+    (move: Parameters<DominoAdapter["applyMove"]>[1]) => {
+      const after = engine.applyMove(state, move) as DominoState;
+      setState(after);
+      setSelectedIndex(null);
+      if (!after.gameOver && after.currentPlayer === 1) vezDaMaquina(after);
+    },
+    [engine, state, vezDaMaquina],
+  );
 
-      // AI move
-      if (!engine.isGameOver(newState)) {
-        setIsAIThinking(true);
-        setTimeout(() => {
-          const mcts = new MCTS(engine, { maxIterations: 2000, timeBudgetMs: 1000 });
-          const aiMove = mcts.computeMove(newState, 1);
-          const finalState = engine.applyMove(newState, aiMove.move);
-          setGameState(finalState);
-          setIsAIThinking(false);
-        }, 500);
-      }
-    }
-  };
+  const handleTileClick = useCallback(
+    (index: number) => {
+      if (!humanTurn || thinking) return;
+      const sides = playable.get(index);
+      if (!sides || sides.length === 0) return;
 
-  const handlePass = () => {
-    const passMove = validMoves.find((m: any) => m.action === "pass");
-    if (passMove) {
-      const newState = engine.applyMove(gameState, passMove);
-      setGameState(newState);
-      setSelectedTile(null);
+      // Encaixa nas duas pontas: a primeira jogada vai para a direita por padrão.
+      const side = sides.includes("right") ? "right" : "left";
+      const move = legalMoves.find(
+        (m) => m.type === "play" && Number(m.data["tileIndex"]) === index && String(m.data["side"]) === side,
+      );
+      if (move) jogar(move);
+    },
+    [humanTurn, thinking, playable, legalMoves, jogar],
+  );
 
-      if (!engine.isGameOver(newState)) {
-        setIsAIThinking(true);
-        setTimeout(() => {
-          const mcts = new MCTS(engine, { maxIterations: 2000, timeBudgetMs: 1000 });
-          const aiMove = mcts.computeMove(newState, 1);
-          const finalState = engine.applyMove(newState, aiMove.move);
-          setGameState(finalState);
-          setIsAIThinking(false);
-        }, 500);
-      }
-    }
-  };
-
-  const handleNewGame = () => {
-    setGameState(UniversalGameFactory.createGame("tile_domino", 2));
-    setSelectedTile(null);
-  };
+  const statusText = gameOver
+    ? state.winner === 0
+      ? "Você bateu!"
+      : state.winner === 1
+        ? "A máquina bateu"
+        : "Mesa bloqueada"
+    : humanTurn
+      ? myHand.length === 0
+        ? "Você bateu!"
+        : canDraw
+          ? "Sem jogada — compre uma peça"
+          : canPass
+            ? "Sem jogada e sem monte — passe a vez"
+            : "Sua vez — escolha uma peça que encaixe"
+      : "Vez da máquina";
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 p-4">
-      <BackButton onClick={onBack} />
-      <div className="mx-auto max-w-6xl">
-        <h1 className="mb-6 text-center text-3xl font-bold text-white">Dominó</h1>
+    <GameShell
+      key={restartKey}
+      title="Dominó"
+      subtitle="Encaixe peças nas pontas — quem bate primeiro vence"
+      onBack={onBack}
+      onRestart={restart}
+      level={level}
+      onLevelChange={setLevel}
+      usesMCTS
+      thinking={thinking}
+      status={
+        <>
+          <span className="font-semibold">{statusText}</span>
+          <span className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
+            <span>mão: {myHand.length}</span>
+            <span>monte: {cs.boneyard.length}</span>
+          </span>
+        </>
+      }
+      footer="Peças que não encaixam ficam apagadas. Quando não há jogada, compre do monte."
+    >
+      <TablePanel className="bg-gradient-to-b from-emerald-900/80 to-emerald-950/90">
+        {/* Mesa */}
+        <div className="mb-4">
+          <div className="mb-2 flex items-center justify-between text-xs font-bold uppercase tracking-wide text-emerald-200/80">
+            <span>Mesa</span>
+            {table.length > 0 ? (
+              <span className="normal-case">
+                pontas: <span className="font-black text-white">{cs.leftEnd}</span>
+                {" · "}
+                <span className="font-black text-white">{cs.rightEnd}</span>
+              </span>
+            ) : null}
+          </div>
 
-        <div className="mb-4 rounded-lg bg-slate-800 p-4 text-white">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-slate-300">
-              Turno: <span className="font-bold text-white">{gameState.currentPlayer === 0 ? "Você" : "IA"}</span>
-            </p>
-            <p className="text-sm text-slate-300">
-              Peças restantes - Você: {playerHand.length} | IA: {aiHand.length}
-            </p>
-            {isAIThinking && (
-              <p className="text-sm text-yellow-400">IA pensando...</p>
+          <div className="flex min-h-[6rem] items-center gap-1 overflow-x-auto rounded-2xl border border-emerald-400/20 bg-emerald-950/40 p-3 sm:min-h-[7rem]">
+            {table.length === 0 ? (
+              <span className="mx-auto text-xs text-emerald-200/50">
+                Mesa vazia — você abre o jogo com qualquer peça
+              </span>
+            ) : (
+              table.map((tile, i) => (
+                <Tile key={`t-${i}`} tile={tile} small horizontal={false} />
+              ))
             )}
           </div>
-          {isGameOver && (
-            <p className="mt-2 text-lg font-bold text-green-400">
-              {winner === null ? "Empate!" : winner === 0 ? "Você venceu!" : "IA venceu!"}
-            </p>
-          )}
         </div>
 
-        {/* AI Hand (hidden) */}
-        <div className="mb-6 rounded-lg bg-slate-800/50 p-4">
-          <h3 className="mb-3 text-sm font-semibold text-slate-400">Mão da IA ({aiHand.length} peças)</h3>
-          <div className="flex gap-2 flex-wrap">
-            {aiHand.map((_, index) => (
-              <div key={index} className="h-20 w-10 rounded bg-slate-700 border-2 border-slate-600" />
-            ))}
+        {/* Mão do jogador */}
+        <div>
+          <div className="mb-2 text-xs font-bold uppercase tracking-wide text-emerald-200/80">
+            Sua mão
           </div>
-        </div>
-
-        {/* Board */}
-        <div className="mb-6 rounded-lg bg-green-800 p-6">
-          <h3 className="mb-4 text-lg font-semibold text-white">Mesa</h3>
-          {board.length === 0 ? (
-            <p className="text-slate-400">Mesa vazia</p>
-          ) : (
-            <div className="flex items-center gap-2 overflow-x-auto pb-2">
-              <button
-                onClick={() => handleBoardEndClick("left")}
-                disabled={selectedTile === null || isGameOver || isAIThinking}
-                className="h-20 w-10 rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-white font-bold"
-              >
-                ←
-              </button>
-              {board.map((tile, index) => (
-                <DominoTile key={index} left={tile.left} right={tile.right} />
-              ))}
-              <button
-                onClick={() => handleBoardEndClick("right")}
-                disabled={selectedTile === null || isGameOver || isAIThinking}
-                className="h-20 w-10 rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-white font-bold"
-              >
-                →
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Player Hand */}
-        <div className="mb-6 rounded-lg bg-slate-800 p-4">
-          <h3 className="mb-3 text-lg font-semibold text-white">Sua Mão</h3>
-          <div className="flex gap-3 flex-wrap">
-            {playerHand.map((tile, index) => (
-              <DominoTile
-                key={index}
-                left={tile.left}
-                right={tile.right}
-                onClick={() => handleTileClick(index)}
-                clickable={gameState.currentPlayer === 0 && !isGameOver && !isAIThinking}
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* Controls */}
-        {!isGameOver && gameState.currentPlayer === 0 && (
-          <div className="flex gap-4 justify-center">
-            {validMoves.some((m: any) => m.action === "pass") && (
-              <button
-                onClick={handlePass}
-                className="rounded-lg bg-yellow-600 px-8 py-3 font-bold text-white transition hover:bg-yellow-700"
-              >
-                Passar
-              </button>
+          <div className="flex flex-wrap gap-2">
+            {myHand.length === 0 ? (
+              <span className="text-xs text-emerald-200/50">sem peças</span>
+            ) : (
+              myHand.map((tile, index) => {
+                const sides = playable.get(index);
+                const jogavel = Boolean(sides && sides.length > 0);
+                return (
+                  <div key={`h-${index}`} className="relative">
+                    <Tile
+                      tile={tile}
+                      selected={selectedIndex === index}
+                      disabled={humanTurn && !jogavel}
+                      onClick={humanTurn && !thinking ? () => handleTileClick(index) : undefined}
+                    />
+                    {humanTurn && jogavel ? (
+                      <span className="pointer-events-none absolute -top-1 left-1/2 -translate-x-1/2 rounded-full bg-emerald-500 px-1.5 text-[9px] font-black text-white shadow">
+                        {sides?.includes("left") && sides?.includes("right")
+                          ? "◀▶"
+                          : sides?.includes("left")
+                            ? "◀"
+                            : "▶"}
+                      </span>
+                    ) : null}
+                  </div>
+                );
+              })
             )}
           </div>
-        )}
+        </div>
 
-        {isGameOver && (
-          <div className="text-center">
+        {/* Ações de compra/passe */}
+        {humanTurn && !thinking && (canDraw || canPass) ? (
+          <div className="mt-4 flex justify-center">
             <button
-              onClick={handleNewGame}
-              className="rounded-lg bg-green-600 px-8 py-3 font-bold text-white transition hover:bg-green-700"
+              onClick={() => {
+                const move = legalMoves.find((m) => m.type === "draw" || m.type === "pass");
+                if (move) jogar(move);
+              }}
+              className="rounded-xl border border-amber-400/60 bg-amber-500/15 px-5 py-2.5 text-sm font-bold text-amber-100 transition-all hover:bg-amber-500/25 active:scale-95"
             >
-              Novo Jogo
+              {canDraw ? "Comprar do monte" : "Passar a vez"}
             </button>
           </div>
-        )}
-      </div>
-    </div>
+        ) : null}
+
+        {gameOver ? (
+          <ResultBanner
+            winner={state.winner}
+            reason={state.reason === "blocked" ? "mesa bloqueada — menor mão vence" : state.reason}
+            opponentName="A máquina"
+            onRestart={restart}
+          />
+        ) : null}
+      </TablePanel>
+    </GameShell>
   );
 }

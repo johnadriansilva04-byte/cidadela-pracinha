@@ -1,177 +1,150 @@
 /**
  * MOTOR UNIVERSAL DE JOGOS CLÁSSICOS
- * Base genérica para TODOS os tipos de jogos: cartas, tabuleiros, dados, dominó, mahjong, etc.
+ *
+ * Contrato e tipos compartilhados por todos os jogos do catálogo (cartas,
+ * tabuleiros, dados, dominó, mahjong, palavras, party, brasileiros…).
+ *
+ * O `UniversalGameState` é o formato único que as UIs consomem, então todo
+ * adaptador precisa respeitá-lo:
+ *  - `board`     → GameBoard com `cells` (a UI desenha a grade a partir dele)
+ *  - `players[]` → mãos, capturas e estado por jogador
+ *  - `customState` → tudo que é específico do jogo, TIPADO por adaptador
+ *
+ * O motor é compatível com a IA genérica (`@/lib/ai/GameEngine`): qualquer jogo
+ * registrado na fábrica ganha MCTS de graça.
  */
+import type { GameEngine } from "../ai/GameEngine";
 
-// ========================================
-// CATEGORIAS DE JOGOS
-// ========================================
+/* ============================================================ CATEGORIAS == */
 
 export type GameCategory =
-  // Jogos de Cartas
-  | "card_poker"          // Texas Hold'em, Omaha, Draw, Stud
-  | "card_blackjack"      // 21
-  | "card_baccarat"       // Punto Banco
-  | "card_rummy"          // Gin Rummy, Canasta, Buraco
-  | "card_trick"          // Bridge, Hearts, Spades, Truco, Sueca
-  | "card_discard"        // Uno, Crazy Eights, Mau Mau
-  | "card_memory"         // War, Go Fish, Old Maid
-  | "card_solitaire"      // Klondike, FreeCell, Spider
+  // Cartas
+  | "card_poker"
+  | "card_blackjack"
+  | "card_baccarat"
+  | "card_rummy"
+  | "card_trick"
+  | "card_discard"
+  | "card_memory"
+  | "card_solitaire"
+  // Tabuleiro
+  | "board_chess"
+  | "board_checkers"
+  | "board_go"
+  | "board_reversi"
+  | "board_mancala"
+  | "board_backgammon"
+  | "board_nine_mens_morris"
+  | "board_connect_four"
+  | "board_tic_tac_toe"
+  | "board_chinese_checkers"
+  | "board_snakes_ladders"
+  | "board_ludo"
+  | "board_monopoly"
+  // Dados
+  | "dice_yahtzee"
+  | "dice_farkle"
+  | "dice_crap"
+  | "dice_pig"
+  | "dice_ships"
+  | "dice_liars_dice"
+  | "dice_mia"
+  | "dice_chuck_a_luck"
+  // Dominó
+  | "domino_block"
+  | "domino_draw"
+  | "domino_all_fives"
+  | "domino_mexican_train"
+  | "domino_matador"
+  // Mahjong
+  | "mahjong_riichi"
+  | "mahjong_hong_kong"
+  | "mahjong_chinese"
+  | "mahjong_solitaire"
+  // Palavras
+  | "word_scrabble"
+  | "word_boggle"
+  | "word_crossword"
+  | "word_hangman"
+  // Abstratos
+  | "abstract_chess_variants"
+  | "abstract_hex"
+  | "abstract_dots_boxes"
+  | "abstract_nim"
+  | "abstract_chomp"
+  // Ação
+  | "action_jenga"
+  | "action_twister"
+  // TCG
+  | "tcg_magic"
+  | "tcg_pokemon"
+  | "tcg_yugioh"
+  // Party
+  | "party_codenames"
+  | "party_dixit"
+  | "party_telestrations"
+  | "party_warewolf"
+  | "party_mafia"
+  // Brasileiros
+  | "brasil_truco"
+  | "brasil_sueca"
+  | "brasil_buraco"
+  | "brasil_tranca"
+  | "brasil_pif_paf"
+  | "brasil_hole"
+  | "brasil_maluco";
 
-  // Jogos de Tabuleiro
-  | "board_chess"         // Xadrez
-  | "board_checkers"      // Damas
-  | "board_go"            // Go
-  | "board_reversi"       // Othello/Reversi
-  | "board_mancala"       // Mancala/Kalah
-  | "board_backgammon"    // Gamão
-  | "board_nine_mens_morris" // Trilha/Jogo da Velha Avançado
-  | "board_connect_four"  // Liga 4
-  | "board_tic_tac_toe"   // Jogo da Velha
-  | "board_chinese_checkers" // Ludo chinês
-  | "board_snakes_ladders" // Cobras e Escadas
-  | "board_ludo"          // Ludo
-  | "board_monopoly"      // Monopoly
-
-  // Jogos de Dados
-  | "dice_yahtzee"        // Yahtzee
-  | "dice_farkle"         // Farkle
-  | "dice_crap"           // Craps
-  | "dice_pig"            // Pig
-  | "dice_ships"          // Batalha Naval com dados
-  | "dice_liars_dice"     // Liar's Dice
-  | "dice_mia"            // Mia
-  | "dice_chuck_a_luck"   // Chuck-a-Luck
-
-  // Jogos de Dominó
-  | "domino_block"        // Dominó bloco
-  | "domino_draw"         // Dominó compra
-  | "domino_all_fives"    // All Fives
-  | "domino_mexican_train" // Trem Mexicano
-  | "domino_matador"      // Matador
-
-  // Jogos de Mahjong/Penhasco
-  | "mahjong_riichi"      // Mahjong Riichi japonês
-  | "mahjong_hong_kong"   // Mahjong Hong Kong
-  | "mahjong_chinese"     // Mahjong chinês clássico
-  | "mahjong_solitaire"   // Mahjong solitário
-
-  // Jogos de Palavras
-  | "word_scrabble"       // Scrabble
-  | "word_boggle"         // Boggle
-  | "word_crossword"      // Palavras cruzadas
-  | "word_hangman"        // Forca
-
-  // Jogos de Estratégia/Abstract
-  | "abstract_chess_variants"  // Variantes de xadrez
-  | "abstract_hex"             // Hex
-  | "abstract_dots_boxes"     // Pontos e Caixas
-  | "abstract_nim"             // Nim
-  | "abstract_chomp"           // Chomp
-
-  // Jogos de Ação/Reflexo (se aplicável)
-  | "action_jenga"         // Jenga
-  | "action_twister"       // Twister
-
-  // Jogos de Roleplaying/Card (TCG)
-  | "tcg_magic"           // Magic: The Gathering
-  | "tcg_pokemon"         // Pokémon TCG
-  | "tcg_yugioh"          // Yu-Gi-Oh!
-
-  // Jogos Party/Social
-  | "party_codenames"     // Codenames
-  | "party_dixit"         // Dixit
-  | "party_telestrations" // Telestrations
-  | "party_warewolf"      // Lobisomem
-  | "party_mafia"         // Mafia
-
-  // Jogos Regionais Brasileiros
-  | "brasil_truco"       // Truco
-  | "brasil_sueca"        // Sueca
-  | "brasil_buraco"       // Buraco
-  | "brasil_tranca"       // Tranca
-  | "brasil_pif_paf"      // Pif Paf
-  | "brasil_hole"         // Hole
-  | "brasil_maluco"       // Maluco;
-
-// ========================================
-// TIPOS BASE DE PEÇAS (Universal)
-// ========================================
+/* ================================================================ PEÇAS == */
 
 export type PieceType =
-  | "card"           // Carta
-  | "checker"        // Peça de dama/xadrez
-  | "stone"          // Pedra de Go
-  | "die"            // Dado
-  | "domino"         // Peça de dominó
-  | "tile"           // Peça de mahjong
-  | "letter"         // Letra (Scrabble)
-  | "pawn"           // Peão genérico
-  | "token"          // Ficha/marcador
-  | "custom";        // Personalizado
+  | "card"
+  | "checker"
+  | "stone"
+  | "die"
+  | "domino"
+  | "tile"
+  | "letter"
+  | "pawn"
+  | "token"
+  | "custom";
 
 export interface GamePiece {
   id: string;
   type: PieceType;
-  owner: number | null; // null = neutro/pool
-  position?: { x: number; y: number } | number; // Posição no tabuleiro
-  data: Record<string, any>; // Dados específicos da peça
+  /** Dono da peça (null = neutra / no monte). */
+  owner: number | null;
+  position?: { x: number; y: number };
+  /** Dados específicos do jogo, sempre indexados por string. */
+  data: Record<string, unknown>;
 }
 
-// ========================================
-// ESTADO UNIVERSAL DE JOGO
-// ========================================
-
-export interface UniversalGameState {
-  // Identificação
-  gameCategory: GameCategory;
-  gameId: string;
-
-  // Jogadores
-  players: UniversalPlayer[];
-  currentPlayer: number;
-  turnOrder: number[];
-
-  // Tabuleiro/Campo de Jogo
-  board: GameBoard;
-  pieces: GamePiece[];
-  deck?: GamePiece[]; // Pool de peças (baralho, saco de dominó, etc.)
-
-  // Estado do jogo
-  phase: string;
-  round: number;
-  subRound?: number;
-
-  // Pontuação/Recursos
-  scores: Record<number, number>;
-  resources?: Record<number, Record<string, number>>; // Fichas, dinheiro, etc.
-
-  // Regras ativas
-  activeRules: string[];
-  variant?: string; // Variante específica do jogo
-
-  // Histórico
-  moveHistory: GameMove[];
-  lastMove: GameMove | null;
-
-  // Estado de fim
-  gameOver: boolean;
-  winner: number | null;
-  reason: string | null;
-
-  // Estado customizável (para jogos específicos)
-  customState: Record<string, any>;
-}
+/* ================================================================ ESTADO == */
 
 export interface UniversalPlayer {
   id: number;
   name: string;
   isBot: boolean;
-  hand: GamePiece[]; // Peças na mão do jogador
-  captured: GamePiece[]; // Peças capturadas
+  /** Peças na mão (cartas, dominós…). */
+  hand: GamePiece[];
+  /** Peças capturadas do adversário. */
+  captured: GamePiece[];
   eliminated: boolean;
-  // Estado customizável
-  customState: Record<string, any>;
+  customState: Record<string, unknown>;
+}
+
+export interface BoardCell {
+  id: string;
+  position: { x: number; y: number };
+  content: GamePiece | null;
+  neighbors: string[];
+  customData: Record<string, unknown>;
+}
+
+export interface BoardEdge {
+  from: string;
+  to: string;
+  weight?: number;
+  customData: Record<string, unknown>;
 }
 
 export interface GameBoard {
@@ -180,210 +153,182 @@ export interface GameBoard {
   height?: number;
   cells?: BoardCell[];
   edges?: BoardEdge[];
-  // Estado customizável do tabuleiro
-  customState: Record<string, any>;
+  customState: Record<string, unknown>;
 }
 
-export interface BoardCell {
-  id: string;
-  position: { x: number; y: number };
-  content: GamePiece | null;
-  neighbors: string[];
-  customData: Record<string, any>;
+/**
+ * Estado universal. Cada adaptador ESTENDE este tipo tipando `customState`
+ * (e pode declarar campos extras, como `board` em matriz, para jogos simples).
+ */
+export interface UniversalGameState {
+  gameCategory: GameCategory;
+  gameId: string;
+
+  players: UniversalPlayer[];
+  currentPlayer: number;
+  turnOrder: number[];
+
+  board: GameBoard;
+  pieces: GamePiece[];
+  /** Monte/baralho/saco com as peças ainda não distribuídas. */
+  deck: GamePiece[];
+
+  phase: string;
+  round: number;
+  subRound?: number;
+
+  scores: Record<number, number>;
+  resources?: Record<number, Record<string, number>>;
+
+  activeRules: string[];
+  variant: string;
+
+  moveHistory: GameMove[];
+  lastMove: GameMove | null;
+
+  gameOver: boolean;
+  winner: number | null;
+  reason: string | null;
+
+  /**
+   * Estado específico do jogo. O tipo base é `object` (e não
+   * `Record<string, unknown>`) para que cada adaptador possa ESTREITAR este
+   * campo com o seu próprio tipo — interfaces não ganham índice implícito.
+   */
+  customState: object;
 }
 
-export interface BoardEdge {
-  from: string;
-  to: string;
-  weight?: number;
-  customData: Record<string, any>;
-}
+/* ============================================================== JOGADAS == */
 
-// ========================================
-// MOVIMENTOS UNIVERSAIS
-// ========================================
+export type MoveType =
+  | "place"
+  | "move"
+  | "capture"
+  | "remove"
+  | "draw"
+  | "discard"
+  | "play"
+  | "pass"
+  | "bet"
+  | "fold"
+  | "trade"
+  | "roll"
+  | "bid"
+  | "challenge"
+  | "custom";
 
 export interface GameMove {
   playerId: number;
   type: MoveType;
   timestamp: number;
-  data: Record<string, any>;
+  /** Dados da jogada, sempre indexados por string. */
+  data: Record<string, unknown>;
 }
 
-export type MoveType =
-  | "place"          // Colocar peça
-  | "move"           // Mover peça
-  | "capture"        // Capturar peça
-  | "remove"         // Remover peça
-  | "draw"           // Puxar peça do deck
-  | "discard"        // Descartar peça
-  | "play"           // Jogar peça
-  | "pass"           // Passar turno
-  | "bet"            // Apostar
-  | "fold"           // Desistir
-  | "trade"          // Trocar peças
-  | "roll"           // Rolar dados
-  | "bid"            // Dar lance
-  | "challenge"      // Desafiar
-  | "custom";        // Ação customizada
-
-// ========================================
-// INTERFACE UNIVERSAL (extends GameEngine)
-// ========================================
-
-import { GameEngine, GameState, Move } from "../ai/GameEngine";
+/* ======================================================= MOTOR UNIVERSAL == */
 
 export interface UniversalGameEngine extends GameEngine<UniversalGameState, GameMove> {
-  /**
-   * Inicializa um jogo específico com configuração.
-   */
+  /** Cria o estado inicial do jogo. */
   initializeGame(category: GameCategory, playerCount: number, variant?: string): UniversalGameState;
 
-  /**
-   * Retorna todas as jogadas legais para o estado atual.
-   */
   getValidMoves(state: UniversalGameState): GameMove[];
-
-  /**
-   * Aplica uma jogada ao estado.
-   */
   applyMove(state: UniversalGameState, move: GameMove): UniversalGameState;
-
-  /**
-   * Verifica se o jogo acabou.
-   */
   isGameOver(state: UniversalGameState): boolean;
-
-  /**
-   * Retorna o vencedor.
-   */
   getWinner(state: UniversalGameState): number | null;
-
-  /**
-   * Avaliação heurística para IA.
-   */
   evaluate(state: UniversalGameState, player: number): number;
-
-  /**
-   * Retorna o jogador atual.
-   */
   getCurrentPlayer(state: UniversalGameState): number;
 
-  // --- Métodos específicos por categoria ---
+  /** Dica do próprio motor (ex.: estratégia básica). Opcional. */
+  suggestMove?(state: UniversalGameState, player: number): GameMove | null;
 
-  /**
-   * Para jogos de cartas: criar baralho.
-   */
-  createCardDeck?(variant?: string): GamePiece[];
-
-  /**
-   * Para jogos de tabuleiro: configurar tabuleiro.
-   */
+  /** Configura o tabuleiro inicial do jogo. Opcional. */
   setupBoard?(category: GameCategory, variant?: string): GameBoard;
 
-  /**
-   * Para jogos de dados: rolar dados.
-   */
-  rollDice?(count: number, sides: number): number[];
-
-  /**
-   * Para jogos de pontuação: calcular pontuação.
-   */
+  /** Pontuação derivada do estado (quando difere de `scores`). Opcional. */
   calculateScore?(state: UniversalGameState, playerId: number): number;
-
-  /**
-   * Validação específica do jogo.
-   */
-  validateGameSpecificMove?(state: UniversalGameState, move: GameMove): boolean;
 }
 
-// ========================================
-// UTILITÁRIOS UNIVERSAIS
-// ========================================
+/* ========================================================== UTILITÁRIOS == */
 
 export class UniversalGameUtils {
   static createPlayer(id: number, name: string, isBot = false): UniversalPlayer {
-    return {
-      id,
-      name,
-      isBot,
-      hand: [],
-      captured: [],
-      eliminated: false,
-      customState: {},
-    };
+    return { id, name, isBot, hand: [], captured: [], eliminated: false, customState: {} };
   }
 
+  /** Tabuleiro em grade com vizinhos ortogonais e diagonais. */
   static createGridBoard(width: number, height: number): GameBoard {
     const cells: BoardCell[] = [];
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
-        const id = `${x}-${y}`;
         const neighbors: string[] = [];
-        // Vizinhos ortogonais
-        if (x > 0) neighbors.push(`${x-1}-${y}`);
-        if (x < width - 1) neighbors.push(`${x+1}-${y}`);
-        if (y > 0) neighbors.push(`${x}-${y-1}`);
-        if (y < height - 1) neighbors.push(`${x}-${y+1}`);
-        // Vizinhos diagonais (opcional)
-        if (x > 0 && y > 0) neighbors.push(`${x-1}-${y-1}`);
-        if (x < width - 1 && y > 0) neighbors.push(`${x+1}-${y-1}`);
-        if (x > 0 && y < height - 1) neighbors.push(`${x-1}-${y+1}`);
-        if (x < width - 1 && y < height - 1) neighbors.push(`${x+1}-${y+1}`);
-
-        cells.push({
-          id,
-          position: { x, y },
-          content: null,
-          neighbors,
-          customData: {},
-        });
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dx === 0 && dy === 0) continue;
+            const nx = x + dx;
+            const ny = y + dy;
+            if (nx >= 0 && nx < width && ny >= 0 && ny < height) neighbors.push(`${nx}-${ny}`);
+          }
+        }
+        cells.push({ id: `${x}-${y}`, position: { x, y }, content: null, neighbors, customData: {} });
       }
     }
+    return { type: "grid", width, height, cells, customState: {} };
+  }
 
-    return {
-      type: "grid",
-      width,
-      height,
-      cells,
-      customState: {},
-    };
+  /** Clona profundamente (a IA exige imutabilidade). */
+  static cloneState<T extends UniversalGameState>(state: T): T {
+    return JSON.parse(JSON.stringify(state)) as T;
+  }
+
+  static createMove(playerId: number, type: MoveType, data: Record<string, unknown> = {}): GameMove {
+    return { playerId, type, timestamp: Date.now(), data };
   }
 
   static findPieceById(pieces: GamePiece[], id: string): GamePiece | null {
-    return pieces.find((p) => p.id === id) || null;
+    return pieces.find((p) => p.id === id) ?? null;
   }
 
   static findPiecesByOwner(pieces: GamePiece[], owner: number): GamePiece[] {
     return pieces.filter((p) => p.owner === owner);
   }
 
-  static createMove(playerId: number, type: MoveType, data: Record<string, any> = {}): GameMove {
-    return {
-      playerId,
-      type,
-      timestamp: Date.now(),
-      data,
-    };
-  }
-
-  static cloneState(state: UniversalGameState): UniversalGameState {
-    return JSON.parse(JSON.stringify(state));
-  }
-
   static getPieceAtCell(board: GameBoard, x: number, y: number): GamePiece | null {
-    if (!board.cells) return null;
-    const cell = board.cells.find((c) => c.position.x === x && c.position.y === y);
-    return cell?.content || null;
+    const cell = board.cells?.find((c) => c.position.x === x && c.position.y === y);
+    return cell?.content ?? null;
   }
 
   static setPieceAtCell(board: GameBoard, x: number, y: number, piece: GamePiece | null): void {
-    if (!board.cells) return;
-    const cell = board.cells.find((c) => c.position.x === x && c.position.y === y);
+    const cell = board.cells?.find((c) => c.position.x === x && c.position.y === y);
     if (cell) cell.content = piece;
   }
-}
 
+  /** Chave estável de uma célula da grade. */
+  static cellId(x: number, y: number): string {
+    return `${x}-${y}`;
+  }
+
+  /** Lê `x-y` de uma chave de célula. */
+  static parseCellId(id: string): { x: number; y: number } | null {
+    const parts = id.split("-");
+    if (parts.length !== 2) return null;
+    const x = Number(parts[0] ?? "");
+    const y = Number(parts[1] ?? "");
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return { x, y };
+  }
+
+  /** Embaralha uma lista (Fisher–Yates) sem mutar a original. */
+  static shuffle<T>(items: readonly T[], rng: () => number = Math.random): T[] {
+    const out = [...items];
+    for (let i = out.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      const a = out[i]!;
+      out[i] = out[j]!;
+      out[j] = a;
+    }
+    return out;
+  }
+}
 // ========================================
 // REGISTRO DE JOGOS
 // ========================================

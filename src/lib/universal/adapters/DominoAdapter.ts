@@ -1,293 +1,311 @@
 /**
- * Adaptador para Dominó
- * Jogo de encaixe de peças.
+ * Adaptador de DOMINÓ (duplo-6, variante bloco e compra).
+ *
+ * Regras implementadas:
+ *  - 28 peças (0-0 a 6-6), 7 na mão de cada jogador
+ *  - a primeira peça define a mesa; depois só encaixa nas extremidades
+ *  - peça pode ser virada para encaixar (`flipped`)
+ *  - variante `draw`: compra do monte quando não há jogada
+ *  - passa o turno quando não há jogada nem monte
+ *  - vitória por bater (mão vazia) ou por bloqueio (menor soma de pontos)
+ *
+ * O estado expõe `customState.hands` (as mãos por jogador) e
+ * `customState.table` (a mesa na ordem de encaixe) — é o que a UI desenha.
  */
-import { UniversalGameEngine, UniversalGameState, GameMove, UniversalGameUtils, GamePiece } from "../UniversalGameEngine";
+import {
+  UniversalGameUtils,
+  type GameCategory,
+  type GameMove,
+  type UniversalGameEngine,
+  type UniversalGameState,
+} from "../UniversalGameEngine";
+
+export interface DominoTile {
+  left: number;
+  right: number;
+}
+
+export interface DominoCustomState {
+  /** Mão de cada jogador (índice = id do jogador). */
+  hands: DominoTile[][];
+  /** Mesa, na ordem de encaixe. */
+  table: DominoTile[];
+  /** Extremidade esquerda e direita (-1 enquanto a mesa está vazia). */
+  leftEnd: number;
+  rightEnd: number;
+  /** Monte de compra. */
+  boneyard: DominoTile[];
+  /** Passes consecutivos (2 = mesa bloqueada). */
+  consecutivePasses: number;
+}
 
 export interface DominoState extends UniversalGameState {
-  customState: {
-    leftEnd: number;
-    rightEnd: number;
-    boneyard: GamePiece[];
-  };
+  customState: DominoCustomState;
+}
+
+const MAX_PIP = 6;
+const HAND_SIZE = 7;
+
+function createSet(): DominoTile[] {
+  const tiles: DominoTile[] = [];
+  for (let i = 0; i <= MAX_PIP; i++) {
+    for (let j = i; j <= MAX_PIP; j++) tiles.push({ left: i, right: j });
+  }
+  return tiles;
+}
+
+export function pips(tile: DominoTile): number {
+  return tile.left + tile.right;
+}
+
+export function handPips(hand: readonly DominoTile[]): number {
+  return hand.reduce((sum, tile) => sum + pips(tile), 0);
 }
 
 export class DominoAdapter implements UniversalGameEngine {
-  /**
-   * Inicializa um jogo de dominó.
-   */
-  initializeGame(category: string, playerCount: number, variant?: string): UniversalGameState {
-    const boneyard = this.createDominoSet();
+  initializeGame(category: GameCategory, playerCount: number, variant?: string): DominoState {
+    const players = Math.max(2, Math.min(4, playerCount));
+    const set = UniversalGameUtils.shuffle(createSet());
+    const hands: DominoTile[][] = [];
+    for (let i = 0; i < players; i++) {
+      hands.push(set.splice(0, HAND_SIZE));
+    }
 
-    return {
-      gameCategory: "domino_block" as any,
+    // A mão já vem distribuída: a fase é "playing" (a UI não tem passo de
+    // distribuição, então o estado inicial precisa ser jogável).
+    const state: DominoState = {
+      gameCategory: "domino_block",
       gameId: `domino-${Date.now()}`,
-      players: Array.from({ length: playerCount }, (_, i) =>
-        UniversalGameUtils.createPlayer(i, `Jogador ${i + 1}`, i > 0)
+      players: Array.from({ length: players }, (_, i) =>
+        UniversalGameUtils.createPlayer(i, i === 0 ? "Você" : `Oponente ${i}`, i > 0),
       ),
       currentPlayer: 0,
-      turnOrder: Array.from({ length: playerCount }, (_, i) => i),
+      turnOrder: Array.from({ length: players }, (_, i) => i),
       board: { type: "custom", customState: {} },
       pieces: [],
-      deck: { cards: boneyard },
-      phase: "dealing",
+      deck: [],
+      phase: "playing",
       round: 1,
-      scores: {},
-      activeRules: ["standard"],
-      variant: variant || "block",
+      scores: Object.fromEntries(Array.from({ length: players }, (_, i) => [i, 0])),
+      activeRules: variant === "draw" ? ["standard", "draw"] : ["standard", "block"],
+      variant: variant ?? "block",
       moveHistory: [],
       lastMove: null,
       gameOver: false,
       winner: null,
       reason: null,
       customState: {
+        hands,
+        table: [],
         leftEnd: -1,
         rightEnd: -1,
-        boneyard,
+        boneyard: set,
+        consecutivePasses: 0,
       },
     };
+    state.players.forEach((p, i) => {
+      p.hand = (hands[i] ?? []).map((tile, idx) => ({
+        id: `d-${i}-${idx}-${tile.left}-${tile.right}`,
+        type: "domino" as const,
+        owner: i,
+        data: { left: tile.left, right: tile.right },
+      }));
+    });
+    return state;
   }
 
-  /**
-   * Cria um conjunto de dominó (duplo-6).
-   */
-  private createDominoSet(): GamePiece[] {
-    const pieces: GamePiece[] = [];
-    let id = 0;
-
-    for (let i = 0; i <= 6; i++) {
-      for (let j = i; j <= 6; j++) {
-        pieces.push({
-          id: `domino-${i}-${j}`,
-          type: "domino",
-          owner: null,
-          data: { left: i, right: j },
-        });
-        id++;
-      }
-    }
-
-    return this.shuffleDominoes(pieces);
+  private clone(state: DominoState): DominoState {
+    return UniversalGameUtils.cloneState(state) as DominoState;
   }
 
-  /**
-   * Embaralha dominós.
-   */
-  private shuffleDominoes(pieces: GamePiece[]): GamePiece[] {
-    const shuffled = [...pieces];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    return shuffled;
+  /** A peça encaixa nesta extremidade? */
+  private fits(tile: DominoTile, end: number): boolean {
+    return tile.left === end || tile.right === end;
   }
 
-  /**
-   * Distribui peças iniciais.
-   */
-  private dealInitialPieces(state: UniversalGameState): UniversalGameState {
-    const newState = UniversalGameUtils.cloneState(state);
-    const piecesPerPlayer = 7;
-
-    for (const player of newState.players) {
-      for (let i = 0; i < piecesPerPlayer; i++) {
-        const piece = newState.customState.boneyard.pop();
-        if (piece) {
-          piece.owner = player.id;
-          player.hand.push(piece);
-        }
-      }
-    }
-
-    newState.phase = "playing";
-    return newState;
-  }
-
-  /**
-   * Retorna jogadas legais.
-   */
   getValidMoves(state: UniversalGameState): GameMove[] {
+    const s = state as DominoState;
+    if (s.gameOver) return [];
+    const player = s.currentPlayer;
+    const hand = s.customState.hands[player] ?? [];
     const moves: GameMove[] = [];
-    const player = state.currentPlayer;
-    const hand = state.players[player].hand;
 
-    if (state.phase === "dealing") {
-      // Primeira jogada - qualquer peça
-      for (const piece of hand) {
-        moves.push(
-          UniversalGameUtils.createMove(player, "play", {
-            pieceId: piece.id,
-            side: "left",
-          })
-        );
+    if (s.customState.table.length === 0) {
+      // Mesa vazia: qualquer peça abre o jogo.
+      hand.forEach((tile, index) => {
+        moves.push({
+          playerId: player,
+          type: "play",
+          timestamp: 0,
+          data: { tileIndex: index, side: "left", left: tile.left, right: tile.right },
+        });
+      });
+      return moves;
+    }
+
+    const { leftEnd, rightEnd } = s.customState;
+    hand.forEach((tile, index) => {
+      const fitsLeft = this.fits(tile, leftEnd);
+      const fitsRight = this.fits(tile, rightEnd);
+      if (fitsLeft) {
+        moves.push({
+          playerId: player,
+          type: "play",
+          timestamp: 0,
+          data: { tileIndex: index, side: "left", left: tile.left, right: tile.right },
+        });
       }
-    } else {
-      // Jogadas normais
-      const { leftEnd, rightEnd } = state.customState;
-
-      for (const piece of hand) {
-        const { left, right } = piece.data;
-
-        // Verifica se encaixa na esquerda
-        if (left === leftEnd || right === leftEnd) {
-          moves.push(
-            UniversalGameUtils.createMove(player, "play", {
-              pieceId: piece.id,
-              side: "left",
-              flipped: right === leftEnd,
-            })
-          );
-        }
-
-        // Verifica se encaixa na direita
-        if (left === rightEnd || right === rightEnd) {
-          moves.push(
-            UniversalGameUtils.createMove(player, "play", {
-              pieceId: piece.id,
-              side: "right",
-              flipped: left === rightEnd,
-            })
-          );
-        }
+      if (fitsRight && (!fitsLeft || leftEnd !== rightEnd)) {
+        moves.push({
+          playerId: player,
+          type: "play",
+          timestamp: 0,
+          data: { tileIndex: index, side: "right", left: tile.left, right: tile.right },
+        });
       }
+    });
 
-      // Comprar do boneyard (se variante draw)
-      if (state.variant === "draw" && state.customState.boneyard.length > 0) {
-        moves.push(UniversalGameUtils.createMove(player, "draw", { count: 1 }));
-      }
-
-      // Passar se não tiver jogada
-      if (moves.length === 0) {
-        moves.push(UniversalGameUtils.createMove(player, "pass", {}));
+    if (moves.length === 0) {
+      if (s.customState.boneyard.length > 0) {
+        moves.push({ playerId: player, type: "draw", timestamp: 0, data: { action: "draw" } });
+      } else {
+        moves.push({ playerId: player, type: "pass", timestamp: 0, data: { action: "pass" } });
       }
     }
 
     return moves;
   }
 
-  /**
-   * Aplica jogada.
-   */
   applyMove(state: UniversalGameState, move: GameMove): UniversalGameState {
-    const newState = UniversalGameUtils.cloneState(state);
-    const player = newState.currentPlayer;
-
-    if (state.phase === "dealing") {
-      // Distribui peças e volta
-      return this.dealInitialPieces(state);
-    }
+    const s = state as DominoState;
+    const next = this.clone(s);
+    const cs = next.customState;
+    const player = s.currentPlayer;
 
     if (move.type === "draw") {
-      // Compra peça
-      const piece = newState.customState.boneyard.pop();
-      if (piece) {
-        piece.owner = player;
-        newState.players[player].hand.push(piece);
-      }
-    } else if (move.type === "play") {
-      const { pieceId, side, flipped } = move.data;
-      const pieceIndex = newState.players[player].hand.findIndex((p) => p.id === pieceId);
-      if (pieceIndex === -1) return state;
+      const tile = cs.boneyard.pop();
+      if (tile) cs.hands[player]?.push(tile);
+      // Comprou: o turno volta para o MESMO jogador decidir de novo.
+      next.moveHistory = [...s.moveHistory, move];
+      next.lastMove = move;
+      next.pieces = [];
+      next.players.forEach((p, i) => {
+        p.hand = (cs.hands[i] ?? []).map((t, idx) => ({
+          id: `d-${i}-${idx}-${t.left}-${t.right}`,
+          type: "domino" as const,
+          owner: i,
+          data: { left: t.left, right: t.right },
+        }));
+      });
+      return next;
+    }
 
-      const piece = newState.players[player].hand[pieceIndex]!;
-      newState.players[player].hand.splice(pieceIndex, 1);
-
-      // Adiciona ao tabuleiro
-      newState.pieces.push(piece);
-
-      // Atualiza extremidades
-      const { left, right } = piece.data;
-      if (flipped) {
-        piece.data.left = right;
-        piece.data.right = left;
-      }
-
-      if (state.phase === "dealing" || newState.pieces.length === 1) {
-        newState.customState.leftEnd = piece.data.left;
-        newState.customState.rightEnd = piece.data.right;
-      } else if (side === "left") {
-        newState.customState.leftEnd = piece.data.left;
+    if (move.type === "pass") {
+      cs.consecutivePasses += 1;
+      const players = next.players.length;
+      if (cs.consecutivePasses >= players) {
+        // Mesa bloqueada: vence quem tiver menos pontos na mão.
+        next.gameOver = true;
+        next.reason = "blocked";
+        let best = Number.POSITIVE_INFINITY;
+        let winner = 0;
+        cs.hands.forEach((hand, i) => {
+          const total = handPips(hand);
+          if (total < best) {
+            best = total;
+            winner = i;
+          }
+        });
+        next.winner = winner;
       } else {
-        newState.customState.rightEnd = piece.data.right;
+        next.currentPlayer = (player + 1) % players;
       }
-    } else if (move.type === "pass") {
-      // Passa turno
+      next.moveHistory = [...s.moveHistory, move];
+      next.lastMove = move;
+      return next;
     }
 
-    // Verifica vitória
-    if (newState.players[player].hand.length === 0) {
-      newState.gameOver = true;
-      newState.winner = player;
-      newState.reason = "domino";
+    if (move.type === "play") {
+      const index = Number(move.data["tileIndex"] ?? -1);
+      const side = String(move.data["side"] ?? "left");
+      const hand = cs.hands[player] ?? [];
+      const tile = hand[index];
+      if (!tile) return s;
+
+      hand.splice(index, 1);
+
+      // Normaliza a orientação para que a peça encaixe na extremidade.
+      if (cs.table.length === 0) {
+        cs.table.push({ left: tile.left, right: tile.right });
+        cs.leftEnd = tile.left;
+        cs.rightEnd = tile.right;
+      } else if (side === "left") {
+        const placed = tile.right === cs.leftEnd ? { left: tile.left, right: tile.right } : { left: tile.right, right: tile.left };
+        cs.table.unshift(placed);
+        cs.leftEnd = placed.left;
+      } else {
+        const placed = tile.left === cs.rightEnd ? { left: tile.left, right: tile.right } : { left: tile.right, right: tile.left };
+        cs.table.push(placed);
+        cs.rightEnd = placed.right;
+      }
+
+      cs.consecutivePasses = 0;
+      next.moveHistory = [...s.moveHistory, move];
+      next.lastMove = move;
+      next.pieces = [];
+      next.players.forEach((p, i) => {
+        p.hand = (cs.hands[i] ?? []).map((t, idx) => ({
+          id: `d-${i}-${idx}-${t.left}-${t.right}`,
+          type: "domino" as const,
+          owner: i,
+          data: { left: t.left, right: t.right },
+        }));
+      });
+
+      if (hand.length === 0) {
+        next.gameOver = true;
+        next.winner = player;
+        next.reason = "domino";
+        next.scores[player] = (next.scores[player] ?? 0) + 1;
+      } else {
+        next.currentPlayer = (player + 1) % next.players.length;
+      }
+      return next;
     }
 
-    // Verifica bloqueio
-    const allPassed = newState.moveHistory.slice(-newState.players.length).every((m) => m.type === "pass");
-    if (allPassed && newState.pieces.length > 0) {
-      newState.gameOver = true;
-      newState.winner = this.calculateWinnerByPips(newState);
-      newState.reason = "blocked";
-    }
-
-    newState.currentPlayer = (player + 1) % newState.players.length;
-    newState.moveHistory.push(move);
-    newState.lastMove = move;
-
-    return newState;
+    return s;
   }
 
-  /**
-   * Calcula vencedor por pontos quando bloqueado.
-   */
-  private calculateWinnerByPips(state: UniversalGameState): number {
-    let minPips = Infinity;
-    let winner = 0;
-
-    for (const player of state.players) {
-      const pips = player.hand.reduce((sum, piece) => sum + piece.data.left + piece.data.right, 0);
-      if (pips < minPips) {
-        minPips = pips;
-        winner = player.id;
-      }
-    }
-
-    return winner;
-  }
-
-  /**
-   * Verifica se jogo acabou.
-   */
   isGameOver(state: UniversalGameState): boolean {
     return state.gameOver;
   }
 
-  /**
-   * Retorna vencedor.
-   */
   getWinner(state: UniversalGameState): number | null {
     return state.winner;
   }
 
-  /**
-   * Avaliação heurística.
-   */
+  /** Menos pontos na mão é melhor. */
   evaluate(state: UniversalGameState, player: number): number {
-    if (state.gameOver && state.winner === player) return 100000;
-    if (state.gameOver && state.winner !== null) return -100000;
-
-    const handPips = state.players[player].hand.reduce(
-      (sum, piece) => sum + piece.data.left + piece.data.right,
-      0
-    );
-
-    // Menos pontos = melhor
-    return -handPips;
+    const s = state as DominoState;
+    if (s.gameOver) {
+      if (s.winner === null) return 0;
+      return s.winner === player ? 100_000 : -100_000;
+    }
+    const mine = handPips(s.customState.hands[player] ?? []);
+    let foeBest = 0;
+    s.customState.hands.forEach((hand, i) => {
+      if (i === player) return;
+      const total = handPips(hand);
+      if (total > foeBest) foeBest = total;
+    });
+    return (foeBest - mine) * 10;
   }
 
-  /**
-   * Retorna jogador atual.
-   */
   getCurrentPlayer(state: UniversalGameState): number {
-    return state.currentPlayer;
+    return (state as DominoState).currentPlayer;
+  }
+
+  moveKey(move: GameMove): string {
+    return `${move.type}:${String(move.data["tileIndex"] ?? "")}:${String(move.data["side"] ?? "")}`;
   }
 }
