@@ -34,6 +34,7 @@ import { loadCareerFromSupabase } from "@/components/botao/career/careerRemote";
 import { missoesTrilha } from "@/components/botao/career/trilhaIntegracao";
 import { BolsaResumoCard } from "@/components/financial/BolsaResumoCard";
 import { BackButton } from "@/components/BackButton";
+import { UniversalGameView } from "@/components/universal/UniversalGameView";
 
 export const Route = createFileRoute("/cidadela")({
   head: () => ({
@@ -70,6 +71,11 @@ type Game =
   | "comercial"
   | "laboratorio"
   | "carbrawl"
+  | "xadrez"
+  | "dama"
+  | "blackjack"
+  | "domino"
+  | "yahtzee"
   | null;
 
 const GAMES = [
@@ -92,7 +98,7 @@ const GAMES = [
     label: "Xadrez",
     description: "Tática clássica",
     icon: Crown,
-    status: "em breve",
+    status: "disponível",
   },
   {
     id: "carbrawl" as Game,
@@ -106,7 +112,28 @@ const GAMES = [
     label: "Dama",
     description: "Capturas",
     icon: Grid3X3,
-    status: "em breve",
+    status: "disponível",
+  },
+  {
+    id: "blackjack" as Game,
+    label: "Blackjack",
+    description: "21 pontos",
+    icon: IdCard,
+    status: "disponível",
+  },
+  {
+    id: "domino" as Game,
+    label: "Dominó",
+    description: "Encaixe",
+    icon: Grid3X3,
+    status: "disponível",
+  },
+  {
+    id: "yahtzee" as Game,
+    label: "Yahtzee",
+    description: "Dados e sorte",
+    icon: Target,
+    status: "disponível",
   },
 ];
 
@@ -268,6 +295,11 @@ function CidadelaCompView() {
       return;
     }
     if (game === "campus" || game === "comercial" || game === "laboratorio") {
+      setActiveGame(game);
+      return;
+    }
+    // Jogos do sistema universal
+    if (game === "xadrez" || game === "dama" || game === "blackjack" || game === "domino" || game === "yahtzee") {
       setActiveGame(game);
       return;
     }
@@ -435,6 +467,26 @@ function CidadelaCompView() {
 
   if (activeGame === "botao") {
     return <BotaoGame onBack={() => setActiveGame(null)} initialHydrated />;
+  }
+
+  if (activeGame === "xadrez") {
+    return <UniversalGameView gameType="xadrez" onBack={() => setActiveGame(null)} />;
+  }
+
+  if (activeGame === "dama") {
+    return <UniversalGameView gameType="dama" onBack={() => setActiveGame(null)} />;
+  }
+
+  if (activeGame === "blackjack") {
+    return <UniversalGameView gameType="blackjack" onBack={() => setActiveGame(null)} />;
+  }
+
+  if (activeGame === "domino") {
+    return <UniversalGameView gameType="domino" onBack={() => setActiveGame(null)} />;
+  }
+
+  if (activeGame === "yahtzee") {
+    return <UniversalGameView gameType="yahtzee" onBack={() => setActiveGame(null)} />;
   }
 
   return (
