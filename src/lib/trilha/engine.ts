@@ -4,6 +4,128 @@
  */
 import { ADJACENCY, MILLS, MILLS_BY_NODE, NODE_COUNT } from "./board";
 
+export const WIN = 100000;
+
+interface Weights {
+  mill: number;
+  blockedFoe: number;
+  material: number;
+  twoInLine: number;
+  threeInLine: number;
+  doubleMill: number;
+  mobility: number;
+}
+
+const PLACING_W: Weights = {
+  mill: 26,
+  blockedFoe: 1,
+  material: 9,
+  twoInLine: 10,
+  threeInLine: 7,
+  doubleMill: 42,
+  mobility: 0,
+};
+
+const MOVING_W: Weights = {
+  mill: 43,
+  blockedFoe: 10,
+  material: 11,
+  twoInLine: 8,
+  threeInLine: 0,
+  doubleMill: 42,
+  mobility: 5,
+};
+
+function lineStats(state: GameState, player: Player) {
+  let two = 0;
+  let three = 0;
+  for (const m of MILLS) {
+    let own = 0;
+    let empty = 0;
+    for (const n of m) {
+      const c = state.board[n];
+      if (c === player) own++;
+      else if (c === 0) empty++;
+    }
+    if (own === 2 && empty === 1) two++;
+    if (own === 1 && empty === 2) three++;
+  }
+  return { two, three };
+}
+
+function doubleMills(state: GameState, player: Player): number {
+  let count = 0;
+  for (let n = 0; n < state.board.length; n++) {
+    if (state.board[n] !== player) continue;
+    let mills = 0;
+    for (const m of MILLS) {
+      if (!m.includes(n)) continue;
+      if (
+        state.board[m[0]!] === player &&
+        state.board[m[1]!] === player &&
+        state.board[m[2]!] === player
+      )
+        mills++;
+    }
+    if (mills >= 2) count++;
+  }
+  return count;
+}
+
+function blockedPieces(state: GameState, player: Player): number {
+  if (canFly(state, player)) return 0;
+  let blocked = 0;
+  for (let n = 0; n < state.board.length; n++) {
+    if (state.board[n] !== player) continue;
+    if (!(ADJACENCY[n] ?? []).some((a) => state.board[a] === 0)) blocked++;
+  }
+  return blocked;
+}
+
+function mobility(state: GameState, player: Player): number {
+  if (canFly(state, player)) return 12;
+  let m = 0;
+  for (let n = 0; n < state.board.length; n++) {
+    if (state.board[n] !== player) continue;
+    for (const a of ADJACENCY[n] ?? []) if (state.board[a] === 0) m++;
+  }
+  return m;
+}
+
+/**
+ * Avaliação estática do ponto de vista de `me`.
+ * Valores positivos = vantagem para `me`, negativos = desvantagem.
+ */
+export function evaluate(state: GameState, me: Player): number {
+  const foe = opponent(me);
+
+  if (state.winner) return state.winner === me ? WIN : -WIN;
+
+  const myCount = countOnBoard(state.board, me) + state.hand[me];
+  const foeCount = countOnBoard(state.board, foe) + state.hand[foe];
+  // Derrota quando o adversário fica com menos de 2 peças no tabuleiro (<= 2).
+  // Com 3 peças ainda há "voo" — terminais reais já caem em state.winner.
+  if (state.phase === "moving") {
+    if (countOnBoard(state.board, foe) < 2) return WIN;
+    if (countOnBoard(state.board, me) < 2) return -WIN;
+  }
+
+  const w = state.phase === "placing" ? PLACING_W : MOVING_W;
+  const myLines = lineStats(state, me);
+  const foeLines = lineStats(state, foe);
+
+  let score = 0;
+  score += w.mill * (countMills(state.board, me) - countMills(state.board, foe));
+  score += w.material * (myCount - foeCount);
+  score += w.twoInLine * (myLines.two - foeLines.two);
+  score += w.threeInLine * (myLines.three - foeLines.three);
+  score += w.doubleMill * (doubleMills(state, me) - doubleMills(state, foe));
+  score += w.blockedFoe * (blockedPieces(state, foe) - blockedPieces(state, me));
+  score += w.mobility * (mobility(state, me) - mobility(state, foe));
+
+  return score;
+}
+
 export type Player = 1 | 2;
 export type Cell = 0 | Player;
 export type Phase = "placing" | "moving" | "over";

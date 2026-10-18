@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as BibliotecaRouteImport } from './routes/biblioteca'
 import { Route as BrioRouteImport } from './routes/brio'
 import { Route as CampusRouteImport } from './routes/campus'
+import { Route as CarbrawlRouteImport } from './routes/carbrawl'
 import { Route as CidadelaRouteImport } from './routes/cidadela'
 import { Route as CorretorRouteImport } from './routes/corretor'
 import { Route as GeradorRouteImport } from './routes/gerador'
@@ -41,6 +42,11 @@ const BrioRoute = BrioRouteImport.update({
 const CampusRoute = CampusRouteImport.update({
   id: '/campus',
   path: '/campus',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CarbrawlRoute = CarbrawlRouteImport.update({
+  id: '/carbrawl',
+  path: '/carbrawl',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CidadelaRoute = CidadelaRouteImport.update({
@@ -94,6 +100,7 @@ export interface FileRoutesByFullPath {
   '/biblioteca': typeof BibliotecaRoute
   '/brio': typeof BrioRoute
   '/campus': typeof CampusRoute
+  '/carbrawl': typeof CarbrawlRoute
   '/cidadela': typeof CidadelaRoute
   '/corretor': typeof CorretorRoute
   '/gerador': typeof GeradorRoute
@@ -109,6 +116,7 @@ export interface FileRoutesByTo {
   '/biblioteca': typeof BibliotecaRoute
   '/brio': typeof BrioRoute
   '/campus': typeof CampusRoute
+  '/carbrawl': typeof CarbrawlRoute
   '/cidadela': typeof CidadelaRoute
   '/corretor': typeof CorretorRoute
   '/gerador': typeof GeradorRoute
@@ -125,6 +133,7 @@ export interface FileRoutesById {
   '/biblioteca': typeof BibliotecaRoute
   '/brio': typeof BrioRoute
   '/campus': typeof CampusRoute
+  '/carbrawl': typeof CarbrawlRoute
   '/cidadela': typeof CidadelaRoute
   '/corretor': typeof CorretorRoute
   '/gerador': typeof GeradorRoute
@@ -142,6 +151,7 @@ export interface FileRouteTypes {
     | '/biblioteca'
     | '/brio'
     | '/campus'
+    | '/carbrawl'
     | '/cidadela'
     | '/corretor'
     | '/gerador'
@@ -157,6 +167,7 @@ export interface FileRouteTypes {
     | '/biblioteca'
     | '/brio'
     | '/campus'
+    | '/carbrawl'
     | '/cidadela'
     | '/corretor'
     | '/gerador'
@@ -172,6 +183,7 @@ export interface FileRouteTypes {
     | '/biblioteca'
     | '/brio'
     | '/campus'
+    | '/carbrawl'
     | '/cidadela'
     | '/corretor'
     | '/gerador'
@@ -188,6 +200,7 @@ export interface RootRouteChildren {
   BibliotecaRoute: typeof BibliotecaRoute
   BrioRoute: typeof BrioRoute
   CampusRoute: typeof CampusRoute
+  CarbrawlRoute: typeof CarbrawlRoute
   CidadelaRoute: typeof CidadelaRoute
   CorretorRoute: typeof CorretorRoute
   GeradorRoute: typeof GeradorRoute
@@ -227,6 +240,13 @@ declare module '@tanstack/react-router' {
       path: '/campus'
       fullPath: '/campus'
       preLoaderRoute: typeof CampusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/carbrawl': {
+      id: '/carbrawl'
+      path: '/carbrawl'
+      fullPath: '/carbrawl'
+      preLoaderRoute: typeof CarbrawlRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/cidadela': {
@@ -300,6 +320,7 @@ const rootRouteChildren: RootRouteChildren = {
   BibliotecaRoute: BibliotecaRoute,
   BrioRoute: BrioRoute,
   CampusRoute: CampusRoute,
+  CarbrawlRoute: CarbrawlRoute,
   CidadelaRoute: CidadelaRoute,
   CorretorRoute: CorretorRoute,
   GeradorRoute: GeradorRoute,
