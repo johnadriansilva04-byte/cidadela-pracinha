@@ -24,9 +24,9 @@
  * O motor é agnóstico ao jogo: tudo vem do `GameEngine` recebido.
  * Determinismo: `seed` / `setRNG()` reproduzem uma busca inteira.
  */
-import type { GameEngine, GameState, Move } from "./GameEngine";
+import { chaveDaJogada, type GameEngine, type GameState, type Move } from "./GameEngine";
 
-export interface MCTSConfig {
+export interface MCTSConfig<M extends Move = Move> {
   /** Número máximo de iterações (simulações). */
   maxIterations: number;
   /** Orçamento de tempo em milissegundos (o que estourar primeiro encerra). */
@@ -106,6 +106,14 @@ export interface MCTSConfig {
    * ganhavam a checagem tática — o Difícil jogava PIOR que o Fácil.
    */
   verifyTimeShare: number;
+  /**
+   * Jogada recomendada pelo próprio jogo (`suggestMove`), usada como PALPITE:
+   * é tentada primeiro na verificação e recebe prior na árvore. Substituir a
+   * busca por ela capava a força do nível Difícil (v. `decidirJogada`).
+   */
+  hintMove: M | null;
+  /** Peso do prior dado ao palpite (0 = desliga). */
+  hintPriorWeight: number;
   /** Semente do RNG (reprodutibilidade). */
   seed: number;
 }
@@ -314,8 +322,13 @@ class Node<S extends GameState, M extends Move> {
 
 export class MCTS<S extends GameState, M extends Move> {
   private readonly engine: GameEngine<S, M>;
-  private readonly config: MCTSConfig;
+  private readonly config: MCTSConfig<M>;
   private rng: () => number;
+  /**
+   * Chave do palpite (`hintMove`) no estado atual, ou null. Recriada a cada
+   * `computeMove` porque depende do estado, não da config.
+   */
+  private hintKey: string | null = null;
   /**
    * Instante-limite da busca em curso (0 = sem limite). O rollout consulta
    * este valor: uma única simulação pode custar centenas de ms (xadrez), e
@@ -332,7 +345,7 @@ export class MCTS<S extends GameState, M extends Move> {
    */
   private verifyDeadline = 0;
 
-  constructor(engine: GameEngine<S, M>, config: Partial<MCTSConfig> = {}) {
+  constructor(engine: GameEngine<S, M>, config: Partial<MCTSConfig<M>> = {}) {
     this.engine = engine;
     this.config = {
       maxIterations: config.maxIterations ?? 10_000,
@@ -351,6 +364,8 @@ export class MCTS<S extends GameState, M extends Move> {
       rolloutValueScale: config.rolloutValueScale ?? 400,
       verifyDepth: config.verifyDepth ?? 0,
       verifyTimeShare: config.verifyTimeShare ?? 0.25,
+      hintMove: config.hintMove ?? null,
+      hintPriorWeight: config.hintPriorWeight ?? 0,
       seed: config.seed ?? 0x9e3779b9,
     };
     this.rng = mulberry32(this.config.seed);
@@ -394,6 +409,18 @@ export class MCTS<S extends GameState, M extends Move> {
         visits: 0,
         rootMoves: [{ move: instantWin, visits: 1, sims: 1, winRate: 1 }],
       };
+    }
+
+    // O palpite do motor vai para a FRENTE da lista: a verificação negamax
+    // percorre nessa ordem, então o lance recomendado é avaliado primeiro e
+    // as podas alfa-beta ficam mais eficazes.
+    this.hintKey = this.config.hintMove ? chaveDaJogada(this.engine, this.config.hintMove) : null;
+    if (this.hintKey !== null) {
+      const idx = rootMoves.findIndex((m) => chaveDaJogada(this.engine, m) === this.hintKey);
+      if (idx > 0) {
+        const [palpite] = rootMoves.splice(idx, 1);
+        if (palpite !== undefined) rootMoves.unshift(palpite);
+      }
     }
 
     const root = new Node<S, M>(
@@ -452,10 +479,12 @@ export class MCTS<S extends GameState, M extends Move> {
         // `rootMoves` é a lista COMPLETA de lances legais: a verificação nunca
         // deixa um lance sem avaliação por não ter sido simulado.
         const ordered = rootStats.map((entry) => entry.move);
+        const vistas = new Set(ordered.map((m) => chaveDaJogada(this.engine, m)));
         for (const move of rootMoves) {
-          if (!ordered.some((m) => this.engine.moveKey?.(m) === this.engine.moveKey?.(move))) {
-            ordered.push(move);
-          }
+          const chave = chaveDaJogada(this.engine, move);
+          if (vistas.has(chave)) continue;
+          vistas.add(chave);
+          ordered.push(move);
         }
         chosen = this.verifyRoot(state, player, ordered) ?? chosen;
       }
@@ -549,6 +578,16 @@ export class MCTS<S extends GameState, M extends Move> {
       if (Number.isFinite(raw)) {
         child.applyPrior(this.config.priorWeight, sigmoid(raw, this.config.priorScale));
       }
+    }
+
+    // O palpite do motor ganha prior extra: a busca ainda pode descartá-lo,
+    // mas precisa gastar simulações para provar que ele é ruim.
+    if (
+      this.config.hintPriorWeight > 0 &&
+      this.hintKey !== null &&
+      chaveDaJogada(this.engine, move) === this.hintKey
+    ) {
+      child.applyPrior(this.config.hintPriorWeight, 0.75);
     }
 
     parent.children.push(child);

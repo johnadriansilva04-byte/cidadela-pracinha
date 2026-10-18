@@ -6,6 +6,7 @@
  * (a busca roda com orçamento de tempo curto e devolve a melhor jogada
  * encontrada até o limite).
  */
+import { chaveDaJogada, type GameEngine, type Move } from "@/lib/ai/GameEngine";
 import { MCTS } from "@/lib/ai/MCTS";
 import type { GameMove, UniversalGameEngine, UniversalGameState } from "@/lib/universal/UniversalGameEngine";
 
@@ -17,6 +18,8 @@ export interface AiBudget {
   timeBudgetMs: number;
   /** Probabilidade de jogar uma jogada sub-ótima (imperfeição humana). */
   blunder: number;
+  /** Peso do prior dado ao palpite do motor (0 = desliga o palpite). */
+  hintPriorWeight: number;
   /** Profundidade da verificação negamax pós-MCTS (0 = sem verificação). */
   verifyDepth: number;
 }
@@ -27,9 +30,32 @@ export interface AiBudget {
  * mais profundidade significa tática exata mais longe.
  */
 export const AI_LEVELS: Record<AiLevel, AiBudget> = {
-  facil: { label: "Fácil", maxIterations: 400, timeBudgetMs: 250, blunder: 0.3, verifyDepth: 1 },
-  medio: { label: "Médio", maxIterations: 2_500, timeBudgetMs: 800, blunder: 0.08, verifyDepth: 2 },
-  dificil: { label: "Difícil", maxIterations: 40_000, timeBudgetMs: 1_800, blunder: 0, verifyDepth: 3 },
+  facil: {
+    label: "Fácil",
+    maxIterations: 400,
+    timeBudgetMs: 250,
+    blunder: 0.3,
+    verifyDepth: 1,
+    hintPriorWeight: 1,
+  },
+  medio: {
+    label: "Médio",
+    maxIterations: 2_500,
+    timeBudgetMs: 800,
+    blunder: 0.08,
+    verifyDepth: 2,
+    hintPriorWeight: 2,
+  },
+  dificil: {
+    label: "Difícil",
+    maxIterations: 40_000,
+    timeBudgetMs: 1_800,
+    blunder: 0,
+    verifyDepth: 3,
+    // Palpite forte: no Difícil ele é um bom ponto de partida, mas quem decide
+    // continua sendo a busca (que pode contradizê-lo com evidência).
+    hintPriorWeight: 4,
+  },
 };
 
 export interface AiDecision {
@@ -44,9 +70,9 @@ export interface AiDecision {
  * Decide a jogada da máquina.
  *
  * Ordem de preferência:
- *  1. `suggestMove` do próprio motor (regras específicas, ex.: Blackjack)
- *  2. MCTS com rollout heurístico (jogos táticos)
- *  3. primeira jogada legal (rede de segurança — a IA nunca "trava")
+ *  1. MCTS (a busca é sempre a decisora; o `suggestMove` do motor entra como
+ *     palpite priorizado, nunca como resposta pronta)
+ *  2. primeira jogada legal (rede de segurança — a IA nunca "trava")
  */
 export function decidirJogada(
   engine: UniversalGameEngine,
@@ -60,11 +86,13 @@ export function decidirJogada(
 
   const budget = AI_LEVELS[level];
 
-  // 1. Regras específicas do jogo (mais baratas e mais confiáveis quando existem).
+  // 1. Palpite do próprio motor (estratégia específica do jogo, quando existe).
+  //
+  // O palpite NÃO substitui a busca: entra como candidata privilegiada (prior
+  // na árvore + primeira na verificação) e a busca decide. Encurtar o caminho
+  // aqui capava a força do nível Difícil — medido no Mancala, o palpite guloso
+  // perdia 0 x 4 para a busca e ainda assim era usado em 59% das posições.
   const suggestion = engine.suggestMove?.(state, player) ?? null;
-  if (suggestion) {
-    return { move: suggestion, iterations: 0, elapsedMs: 0, winRate: 1 };
-  }
 
   // 2. Busca Monte Carlo.
   const startedAt = Date.now();
@@ -83,6 +111,10 @@ export function decidirJogada(
       // que o MCTS priorizou. É o que garante que a IA não perca para o acaso
       // quando o orçamento dá poucas simulações por jogada.
       verifyDepth: budget.verifyDepth,
+      // O palpite vira prior na árvore e vai para a frente da verificação.
+      // Peso proporcional ao nível: nos fáceis ele quase não influencia.
+      hintMove: suggestion,
+      hintPriorWeight: budget.hintPriorWeight,
       seed: Math.floor(rng() * 0xffffffff),
     });
     const result = mcts.computeMove(state, player);
@@ -117,7 +149,13 @@ export function jogadaComImperfeicao(
 
   const moves = engine.getValidMoves(state);
   if (moves.length <= 1) return decision;
-  const alternatives = moves.filter((m) => engine.moveKey?.(m) !== engine.moveKey?.(decision.move!));
+  // `chaveDaJogada` (não `engine.moveKey?.`) — sem a rede de segurança a
+  // comparação virava `undefined === undefined` e descartava TODAS as
+  // alternativas, de modo que os níveis fáceis nunca erravam de propósito.
+  const chaveEscolhida = chaveDaJogada(engine as GameEngine<object, Move>, decision.move);
+  const alternatives = moves.filter(
+    (m) => chaveDaJogada(engine as GameEngine<object, Move>, m) !== chaveEscolhida,
+  );
   if (alternatives.length === 0) return decision;
   return { ...decision, move: alternatives[Math.floor(rng() * alternatives.length)] ?? decision.move };
 }

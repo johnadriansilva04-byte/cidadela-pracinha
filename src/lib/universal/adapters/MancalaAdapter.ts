@@ -250,4 +250,9 @@ export class MancalaAdapter implements UniversalGameEngine {
     }
     return null;
   }
+
+  moveKey(move: GameMove): string {
+    const d = move.data as { pit?: number };
+    return `p${d.pit ?? -1}`;
+  }
 }

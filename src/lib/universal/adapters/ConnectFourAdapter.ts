@@ -273,4 +273,9 @@ export class ConnectFourAdapter implements UniversalGameEngine {
     }
     return null;
   }
+
+  moveKey(move: GameMove): string {
+    const d = move.data as { col?: number; row?: number };
+    return `c${d.col ?? -1}`;
+  }
 }

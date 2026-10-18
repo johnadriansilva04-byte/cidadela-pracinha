@@ -1,3 +1,47 @@
+## IA dos jogos: fim do atalho de `suggestMove` + chave de jogada estável (2026-10-18, 35ª passada)
+
+Pedido do dono: "melhorias". Achei e corrigi **três** defeitos medidos, todos na
+camada de IA compartilhada (nenhum é regra de jogo).
+
+- **O `suggestMove` do motor ATALHAVA a busca inteira**: em `decidirJogada`, se o
+  adaptador tinha `suggestMove`, a função retornava ele e nunca instanciava o
+  MCTS. Medido com sonda descartável: Reversi usava o palpite em **97%** das
+  posições, Mancala em **59%**, Blackjack em 100%. Consequência: o seletor de
+  dificuldade era quase inerte nesses jogos (Fácil e Difícil jogavam a MESMA
+  heurística gulosa de 1 ply) e, no Mancala, o palpite guloso **perdia 0 x 4**
+  para a busca — ou seja, o jogo era mais forte SEM o atalho.
+  Fix: o palpite virou **prior** (`hintMove` + `hintPriorWeight` no `MCTSConfig`).
+  Ele é a primeira jogada testada na verificação negamax e ganha prior na árvore,
+  mas quem decide é a busca. Peso cresce com o nível (Fácil 1, Médio 2, Difícil 4).
+  Resultado medido (6 partidas por jogo, caminho real da UI): Difícil 5x1 Fácil
+  no Reversi, 6x0 no Mancala, 6x0 na Liga 4, 5x0(+1 empate) na Velha.
+- **`engine.moveKey?.()` devolvia `undefined` nos dois lados**: a comparação
+  `moveKey?.(a) === moveKey?.(b)` vira `undefined === undefined` → `true` para
+  QUAISQUER duas jogadas. Dois efeitos reais: (1) a verificação negamax nunca
+  anexava os lances não simulados (o `!ordered.some(...)` dava sempre falso); e
+  (2) o filtro de alternativas do `blunder` descartava TUDO — **os níveis fáceis
+  nunca erravam de propósito** (medido: 0 alternativas em Reversi/Mancala/Liga 4/
+  Velha; agora 3/5/6/8). Fix: `chaveDaJogada(engine, move)` em
+  `src/lib/ai/GameEngine.ts` — usa `moveKey` quando existe e cai num JSON que
+  **ignora `timestamp`** (ele é `Date.now()` em `UniversalGameUtils.createMove`
+  e faria jogadas idênticas parecerem diferentes). Os 4 adaptadores novos também
+  ganharam `moveKey` explícito (o contrato já previa; era omissão minha).
+- **`MCTSConfig` virou genérico** (`MCTSConfig<M extends Move = Move>`) para
+  tipar `hintMove` sem `any`. O default do parâmetro mantém o uso antigo válido.
+- **Testes permanentes** em `testes/motores-universais.mts` (64 checks, eram 57):
+  `chaveDaJogada` distingue jogadas sem `moveKey` e ignora `timestamp`; o filtro
+  do blunder tem alternativas; o palpite é prior (peso > 0) e os pesos crescem
+  com o nível; Difícil vence o Fácil no Mancala e no Reversi.
+- **Armadilha do harness**: as sondas temporárias foram removidas; o que fica é
+  a suíte. Ao medir força, use `jogadaComImperfeicao` (caminho da UI, aplica o
+  `blunder`) — `decidirJogada` faz os dois lados jogarem perfeito e mede outra
+  coisa. Determinismo: `timeBudgetMs: 0` desliga o relógio (senão o nº de
+  simulações varia com a carga da máquina e o teste vira flaky).
+- **Verificação**: tsc 0 erros; `motores-universais` 64/64; `render-jogos` 63/63;
+  build OK; `e2e-jogos` 39/39 com 0 erros de console. O Trilha (outro consumidor
+  do MCTS) segue coberto e verde na suíte.
+
+
 ## 4 jogos novos + reserva de orçamento do MCTS (2026-10-18, 34ª passada)
 
 Pedido do dono: "arrume os jogos, add mais". O motor universal declarava ~63

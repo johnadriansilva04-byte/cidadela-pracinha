@@ -9,7 +9,8 @@ import { chooseMove } from "../src/lib/trilha/ai";
 import { createInitialState, generateMoves, applyMove, type GameState } from "../src/lib/trilha/engine";
 import type { GameCategory, UniversalGameState } from "../src/lib/universal/UniversalGameEngine";
 import { BlackjackAdapter, type BlackjackState } from "../src/lib/universal/adapters/BlackjackAdapter";
-import { decidirJogada, jogadaComImperfeicao } from "../src/lib/universal/aiUniversal";
+import { AI_LEVELS, decidirJogada, jogadaComImperfeicao } from "../src/lib/universal/aiUniversal";
+import { chaveDaJogada } from "../src/lib/ai/GameEngine";
 
 let ok = 0;
 let fail = 0;
@@ -444,6 +445,84 @@ console.log("\nJOGOS NOVOS (Liga 4, Velha, Reversi, Mancala)");
       man.getCurrentPlayer(st) === 0 && (st as unknown as { customState: { pits: number[] } }).customState.pits[6] === 1,
       `turno=${man.getCurrentPlayer(st)}`,
     );
+  }
+}
+
+/* ------------------------------- INVARIANTES DA IA (regressões) ---------- */
+{
+  // 1. `chaveDaJogada` tem de distinguir jogadas mesmo sem `moveKey` no motor
+  //    e ignorar `timestamp` (que é Date.now() e muda a cada chamada).
+  const cf = UniversalGameFactory.createEngine("board_connect_four")!;
+  const st = UniversalGameFactory.createGame("board_connect_four", 2)!;
+  const legais = cf.getValidMoves(st);
+  const semKey = {
+    ...cf,
+    moveKey: undefined,
+  } as unknown as Parameters<typeof chaveDaJogada>[0];
+  check(
+    "IA: chaveDaJogada distingue jogadas sem moveKey",
+    chaveDaJogada(semKey, legais[0]!) !== chaveDaJogada(semKey, legais[1]!),
+  );
+  const comTimestamp = { ...legais[0]!, timestamp: 111 } as (typeof legais)[number];
+  const comOutroTimestamp = { ...legais[0]!, timestamp: 999 } as (typeof legais)[number];
+  check(
+    "IA: chaveDaJogada ignora timestamp",
+    chaveDaJogada(semKey, comTimestamp) === chaveDaJogada(semKey, comOutroTimestamp),
+  );
+
+  // 2. O filtro de alternativas do `blunder` precisa achar jogadas diferentes.
+  //    Antes ele comparava `moveKey?.()` nos dois lados (undefined === undefined)
+  //    e devolvia ZERO alternativas: os níveis fáceis nunca erravam de propósito.
+  const alternativas = legais.filter(
+    (m) => chaveDaJogada(cf, m) !== chaveDaJogada(cf, legais[0]!),
+  );
+  check(
+    "IA: blunder tem alternativas (o Fácil erra de propósito)",
+    alternativas.length >= legais.length - 1 && alternativas.length > 0,
+    `${alternativas.length}/${legais.length}`,
+  );
+
+  // 3. O `suggestMove` do motor não pode atalhar a busca: ele entra como
+  //    palpite. Medido antes do fix, o Mancala usava o palpite guloso em 59%
+  //    das posições e perdia 0 x 4 para a busca.
+  const man = UniversalGameFactory.createEngine("board_mancala")!;
+  const stMan = UniversalGameFactory.createGame("board_mancala", 2)!;
+  const palpite = man.suggestMove?.(stMan, 0) ?? null;
+  check(
+    "IA: palpite do motor é usado como prior, não como atalho",
+    palpite !== null && AI_LEVELS.dificil.hintPriorWeight > 0,
+    `palpite=${palpite !== null} peso=${AI_LEVELS.dificil.hintPriorWeight}`,
+  );
+  check(
+    "IA: pesos de palpite crescem com o nível",
+    AI_LEVELS.facil.hintPriorWeight < AI_LEVELS.dificil.hintPriorWeight,
+  );
+
+  // 4. Difícil tem de bater o Fácil também no Mancala e no Reversi — os dois
+  //    jogos cujo atalho de `suggestMove` mascarava a força do nível alto.
+  for (const cat of ["board_mancala", "board_reversi"] as const) {
+    const eng = UniversalGameFactory.createEngine(cat)!;
+    let d = 0;
+    let f = 0;
+    for (let seed = 0; seed < 4; seed++) {
+      let s2 = UniversalGameFactory.createGame(cat, 2)!;
+      let rng = seed * 6151 + 17;
+      const rnd = () => {
+        rng = (rng * 1103515245 + 12345) & 0x7fffffff;
+        return rng / 0x7fffffff;
+      };
+      while (!eng.isGameOver(s2) && s2.moveHistory.length < 400) {
+        const ms = eng.getValidMoves(s2);
+        if (ms.length === 0) break;
+        const p = eng.getCurrentPlayer(s2);
+        const nivel = (p === 0) === (seed % 2 === 0) ? "dificil" : "facil";
+        s2 = eng.applyMove(s2, jogadaComImperfeicao(eng, s2, p, nivel, rnd).move ?? ms[0]!);
+      }
+      const difId = seed % 2 === 0 ? 0 : 1;
+      if (s2.winner === difId) d++;
+      else if (s2.winner !== null) f++;
+    }
+    check(`${cat}: Difícil vence o Fácil`, d > f, `difícil ${d} x ${f} fácil`);
   }
 }
 

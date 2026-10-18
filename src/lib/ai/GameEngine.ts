@@ -48,3 +48,26 @@ export interface GameEngine<S extends GameState, M extends Move> {
    */
   suggestMove?(state: S, player: number): M | null;
 }
+
+/**
+ * Chave estável de uma jogada, com rede de segurança para adaptadores que não
+ * implementam `moveKey`.
+ *
+ * Sem isto, comparar `engine.moveKey?.(a) === engine.moveKey?.(b)` devolve
+ * `undefined === undefined` → `true` para QUAISQUER duas jogadas. Duas
+ * consequências reais: a verificação negamax nunca anexava os lances que não
+ * foram simulados (o `!ordered.some(...)` dava sempre falso) e o filtro de
+ * alternativas do `blunder` descartava todas as jogadas, de modo que os níveis
+ * fáceis nunca erravam de propósito.
+ *
+ * O fallback ignora `timestamp` — ele é `Date.now()` em
+ * `UniversalGameUtils.createMove` e faria duas jogadas idênticas parecerem
+ * diferentes a cada chamada.
+ */
+export function chaveDaJogada<S extends GameState, M extends Move>(
+  engine: GameEngine<S, M>,
+  move: M,
+): string {
+  if (engine.moveKey) return engine.moveKey(move);
+  return JSON.stringify(move, (campo, valor) => (campo === "timestamp" ? undefined : valor));
+}

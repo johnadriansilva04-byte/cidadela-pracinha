@@ -263,4 +263,9 @@ export class TicTacToeAdapter implements UniversalGameEngine {
     }
     return null;
   }
+
+  moveKey(move: GameMove): string {
+    const d = move.data as { x?: number; y?: number };
+    return `${d.x ?? -1},${d.y ?? -1}`;
+  }
 }

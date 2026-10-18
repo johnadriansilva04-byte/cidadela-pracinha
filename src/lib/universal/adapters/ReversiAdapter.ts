@@ -321,4 +321,9 @@ export class ReversiAdapter implements UniversalGameEngine {
     }
     return melhor;
   }
+
+  moveKey(move: GameMove): string {
+    const d = move.data as { x?: number; y?: number };
+    return `${d.x ?? -1},${d.y ?? -1}`;
+  }
 }
