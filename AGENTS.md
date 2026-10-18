@@ -1,3 +1,48 @@
+## Build do Vercel bloqueado: XSS crítico no TanStack Start (2026-10-18, 36ª passada)
+
+O deploy falhava no `npm install` com **E403**, não por config: o Vercel bloqueia
+versões com vulnerabilidade conhecida. Advisory **GHSA-qx66-fv34-fjm8**
+(severidade *critical*) — XSS refletido não autenticado nas respostas de
+server-function do TanStack Start.
+
+- **Faixa afetada (conferida via API do GitHub, não só pela mensagem do Vercel)**:
+  `@tanstack/start-server-core >= 1.143.12 < 1.169.39` e
+  `@tanstack/react-start >= 1.143.12 < 1.168.60`. O projeto estava em
+  `react-start 1.168.32` e `start-server-core 1.169.17` (este vinha transitivo —
+  por isso subir só o `react-start` não bastava).
+- **Fix aplicado** (`package.json`): `@tanstack/react-start` 1.168.32 →
+  **1.169.3**, `@tanstack/react-router` 1.170.18 → **1.170.45** e
+  `@tanstack/router-plugin` 1.168.23 → **1.168.47**. O `start-server-core`
+  resolveu para **1.169.44** pela árvore do `react-start` novo. Alinhar
+  router/router-plugin evita duas cópias de `router-core` no bundle.
+  `@lovable.dev/vite-tanstack-config` declara peer `@tanstack/react-start
+  >=1.100.0`, então o bump é compatível.
+- **NÃO usar `DANGEROUSLY_DEPLOY_VULNERABLE_TANSTACK_START_XSS=1`**: é o escape
+  que o próprio Vercel oferece para subir com o furo. Como a falha é XSS
+  refletido não autenticado (script rodando na origem do app, com acesso aos
+  dados same-origin do visitante), a correção certa é o upgrade.
+- **O patch é real, verificado por diff A/B** (tarballs 1.169.17 vs 1.169.44):
+  o handler novo importa `isDangerousProtocol` de `router-core` e valida o
+  redirect em `createStartHandler.js`; a versão vulnerável **não tem nenhuma
+  ocorrência** desse símbolo. Não confiar só no número da versão.
+- **Efeito colateral do upgrade**: o router novo tipa `error` como `unknown` em
+  `ErrorComponentProps` → `src/routes/__root.tsx` passou a importar o tipo do
+  framework (em vez de um literal próprio, que divergia a cada upgrade) e
+  normaliza com `error instanceof Error ? error : new Error(String(error))`.
+- **Armadilha do ambiente**: `rm -rf node_modules` derruba o `puppeteer-core`,
+  que **não está no `package.json`** (foi instalado ad-hoc para os E2E). Se
+  reinstalar, rode `npm install --no-save puppeteer-core` para os E2E — e
+  confira que os manifests seguem sem ele (`grep -c puppeteer package.json`
+  = 0). O `--no-save` do npm ainda mexe no lockfile: conferir o diff.
+- **Vulnerabilidades restantes** (`npm audit`, todas transitivas de ferramenta de
+  build, não de runtime: `shell-quote`, `brace-expansion`, `js-yaml`,
+  `source-map-js`): o TanStack não aparece mais. Podem ser tratadas depois; não
+  bloqueiam o deploy.
+- **Verificação pós-upgrade**: tsc 0 erros; build exit 0 com artefato
+  `.vercel/output` válido (`nitro.json` + `config.json`); `motores-universais`
+  64/64; `render-jogos` 63/63; `e2e-jogos` 39/39 com 0 erros de console.
+
+
 ## IA dos jogos: fim do atalho de `suggestMove` + chave de jogada estável (2026-10-18, 35ª passada)
 
 Pedido do dono: "melhorias". Achei e corrigi **três** defeitos medidos, todos na

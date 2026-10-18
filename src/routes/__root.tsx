@@ -7,6 +7,7 @@ import {
   useRouterState,
   HeadContent,
   Scripts,
+  type ErrorComponentProps,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 import { AuthProvider, useAuth } from "../components/auth/AuthProvider";
@@ -42,8 +43,11 @@ function NotFoundComponent() {
   );
 }
 
-function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
-  console.error(error);
+function ErrorComponent({ error, reset }: ErrorComponentProps) {
+  // `error` é `unknown` no contrato do router: normaliza para log sem assumir
+  // Error (um throw de string ou objeto também cai aqui).
+  const erro = error instanceof Error ? error : new Error(String(error));
+  console.error(erro);
   const router = useRouter();
 
   return (
