@@ -34,7 +34,11 @@ import { loadCareerFromSupabase } from "@/components/botao/career/careerRemote";
 import { missoesTrilha } from "@/components/botao/career/trilhaIntegracao";
 import { BolsaResumoCard } from "@/components/financial/BolsaResumoCard";
 import { BackButton } from "@/components/BackButton";
-import { UniversalGameView } from "@/components/universal/UniversalGameView";
+import { ChessGameView } from "@/components/universal/ChessGameView";
+import { CheckersGameView } from "@/components/universal/CheckersGameView";
+import { BlackjackGameView } from "@/components/universal/BlackjackGameView";
+import { DominoGameView } from "@/components/universal/DominoGameView";
+import { YahtzeeGameView } from "@/components/universal/YahtzeeGameView";
 
 export const Route = createFileRoute("/cidadela")({
   head: () => ({
@@ -470,23 +474,23 @@ function CidadelaCompView() {
   }
 
   if (activeGame === "xadrez") {
-    return <UniversalGameView gameType="xadrez" onBack={() => setActiveGame(null)} />;
+    return <ChessGameView onBack={() => setActiveGame(null)} />;
   }
 
   if (activeGame === "dama") {
-    return <UniversalGameView gameType="dama" onBack={() => setActiveGame(null)} />;
+    return <CheckersGameView onBack={() => setActiveGame(null)} />;
   }
 
   if (activeGame === "blackjack") {
-    return <UniversalGameView gameType="blackjack" onBack={() => setActiveGame(null)} />;
+    return <BlackjackGameView onBack={() => setActiveGame(null)} />;
   }
 
   if (activeGame === "domino") {
-    return <UniversalGameView gameType="domino" onBack={() => setActiveGame(null)} />;
+    return <DominoGameView onBack={() => setActiveGame(null)} />;
   }
 
   if (activeGame === "yahtzee") {
-    return <UniversalGameView gameType="yahtzee" onBack={() => setActiveGame(null)} />;
+    return <YahtzeeGameView onBack={() => setActiveGame(null)} />;
   }
 
   return (
