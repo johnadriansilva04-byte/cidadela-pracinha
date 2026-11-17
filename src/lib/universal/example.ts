@@ -3,6 +3,7 @@
  * Demonstração com MCTS para múltiplos jogos.
  */
 import { UniversalGameFactory } from "./UniversalGameFactory";
+import type { GameCategory } from "./UniversalGameEngine";
 import { MCTS } from "../ai/MCTS";
 
 // ========================================
@@ -76,7 +77,7 @@ function exemploBlackjack() {
   console.log("\nJogadas disponíveis:", moves.length);
 
   if (moves.length > 0) {
-    const move = moves[0];
+    const move = moves[0]!;
     console.log("- Primeira jogada:", move);
 
     const newState = engine.applyMove(gameState, move);
@@ -135,7 +136,7 @@ function exemploDominoMCTS() {
 
   console.log("Dominó criado:");
   console.log("- Jogadores:", gameState.players.length);
-  console.log("- Boneyard:", gameState.customState.boneyard.length);
+  console.log("- Boneyard:", gameState.customState["boneyard"].length);
 
   const engine = UniversalGameFactory.createEngine("domino_block");
   if (!engine) {
@@ -170,8 +171,8 @@ function exemploYahtzee() {
 
   console.log("Yahtzee criado:");
   console.log("- Jogadores:", gameState.players.length);
-  console.log("- Dados:", gameState.customState.dice);
-  console.log("- Rolagens restantes:", gameState.customState.rollsLeft);
+  console.log("- Dados:", gameState.customState["dice"]);
+  console.log("- Rolagens restantes:", gameState.customState["rollsLeft"]);
 
   const engine = UniversalGameFactory.createEngine("dice_yahtzee");
   if (!engine) {
@@ -183,13 +184,13 @@ function exemploYahtzee() {
   console.log("\nJogadas disponíveis:", moves.length);
 
   if (moves.length > 0) {
-    const move = moves[0];
+    const move = moves[0]!;
     console.log("- Primeira jogada:", move);
 
     const newState = engine.applyMove(gameState, move);
     console.log("\nEstado após jogada:");
-    console.log("- Dados:", newState.customState.dice);
-    console.log("- Rolagens restantes:", newState.customState.rollsLeft);
+    console.log("- Dados:", newState.customState["dice"]);
+    console.log("- Rolagens restantes:", newState.customState["rollsLeft"]);
   }
 }
 
@@ -242,10 +243,10 @@ function exemploBenchmarkMCTS() {
   ];
 
   for (const { category, name } of games) {
-    const gameState = UniversalGameFactory.createGame(category, 2);
+    const gameState = UniversalGameFactory.createGame(category as GameCategory, 2);
     if (!gameState) continue;
 
-    const engine = UniversalGameFactory.createEngine(category);
+    const engine = UniversalGameFactory.createEngine(category as GameCategory);
     if (!engine) continue;
 
     const mcts = new MCTS(engine, {

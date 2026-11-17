@@ -168,7 +168,7 @@ export class MCTS<S extends GameState, M extends Move> {
    */
   computeMove(state: S, player: number): MCTSResult<M> {
     const startTime = Date.now();
-    const root = new Node(state, null, player, null);
+    const root = new Node<S, M>(state, null, player, null);
 
     // Pré-expande a raiz com as jogadas legais
     const validMoves = this.engine.getValidMoves(state);
@@ -339,8 +339,8 @@ export class MCTS<S extends GameState, M extends Move> {
    */
   private inferPlayer(state: S): number {
     // Tenta acessar propriedade comum 'turn'
-    if ("turn" in state && typeof state.turn === "number") {
-      return state.turn as number;
+    if ("turn" in state && typeof state["turn"] === "number") {
+      return state["turn"] as number;
     }
     // Fallback: assume jogador 1
     return 1;
@@ -350,9 +350,10 @@ export class MCTS<S extends GameState, M extends Move> {
    * Converte uma jogada para string para usar como chave no mapa.
    */
   private moveToString(move: M): string {
-    if (typeof move === "string") return move;
-    if (typeof move === "number") return move.toString();
-    return JSON.stringify(move);
+    const bruto = move as unknown;
+    if (typeof bruto === "string") return bruto;
+    if (typeof bruto === "number") return bruto.toString();
+    return JSON.stringify(bruto);
   }
 
   /**

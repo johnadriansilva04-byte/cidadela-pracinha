@@ -48,7 +48,7 @@ export class YahtzeeAdapter implements UniversalGameEngine {
   /**
    * Rola os dados.
    */
-  private rollDice(keep?: number[]): number[] {
+  private rolarDadosMantendo(keep?: number[]): number[] {
     const dice: number[] = [];
     for (let i = 0; i < 5; i++) {
       if (keep && keep.includes(i)) {
@@ -67,7 +67,7 @@ export class YahtzeeAdapter implements UniversalGameEngine {
     const moves: GameMove[] = [];
     const player = state.currentPlayer;
 
-    if (state.phase === "rolling" && state.customState.rollsLeft > 0) {
+    if (state.phase === "rolling" && state.customState["rollsLeft"] > 0) {
       // Pode rolar
       moves.push(UniversalGameUtils.createMove(player, "roll", { keep: [] }));
 
@@ -98,7 +98,7 @@ export class YahtzeeAdapter implements UniversalGameEngine {
    * Retorna categorias disponíveis para marcar.
    */
   private getAvailableCategories(state: UniversalGameState, player: number): string[] {
-    const marked = state.customState.categories[player] || [];
+    const marked = state.customState["categories"][player] || [];
     const allCategories = [
       "ones", "twos", "threes", "fours", "fives", "sixes",
       "three_of_kind", "four_of_kind", "full_house", "small_straight",
@@ -115,17 +115,17 @@ export class YahtzeeAdapter implements UniversalGameEngine {
 
     switch (category) {
       case "ones":
-        return counts[1] * 1;
+        return (counts[1] ?? 0) * 1;
       case "twos":
-        return counts[2] * 2;
+        return (counts[2] ?? 0) * 2;
       case "threes":
-        return counts[3] * 3;
+        return (counts[3] ?? 0) * 3;
       case "fours":
-        return counts[4] * 4;
+        return (counts[4] ?? 0) * 4;
       case "fives":
-        return counts[5] * 5;
+        return (counts[5] ?? 0) * 5;
       case "sixes":
-        return counts[6] * 6;
+        return (counts[6] ?? 0) * 6;
       case "three_of_kind":
         return Object.values(counts).some((c) => c >= 3) ? dice.reduce((a, b) => a + b, 0) : 0;
       case "four_of_kind":
@@ -151,7 +151,7 @@ export class YahtzeeAdapter implements UniversalGameEngine {
   private countDice(dice: number[]): Record<number, number> {
     const counts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
     for (const d of dice) {
-      counts[d]++;
+      counts[d] = (counts[d] ?? 0) + 1;
     }
     return counts;
   }
@@ -163,7 +163,7 @@ export class YahtzeeAdapter implements UniversalGameEngine {
     const unique = [...new Set(dice)].sort((a, b) => a - b);
     let consecutive = 1;
     for (let i = 1; i < unique.length; i++) {
-      if (unique[i] === unique[i - 1] + 1) {
+      if (unique[i] === (unique[i - 1] ?? 0) + 1) {
         consecutive++;
       } else {
         consecutive = 1;
@@ -182,38 +182,37 @@ export class YahtzeeAdapter implements UniversalGameEngine {
 
     if (move.type === "roll") {
       const { keep } = move.data;
-      const newDice = this.rollDice(keep);
+      const newDice = this.rolarDadosMantendo(keep);
 
       // Preenche dados mantidos
       if (keep) {
         for (const i of keep) {
-          newDice[i] = state.customState.dice[i];
+          newDice[i] = state.customState["dice"][i] ?? 0;
         }
       }
 
-      newState.customState.dice = newDice;
-      newState.customState.rollsLeft--;
+      newState.customState["dice"] = newDice;
+      newState.customState["rollsLeft"]--;
 
-      if (newState.customState.rollsLeft === 0) {
+      if (newState.customState["rollsLeft"] === 0) {
         newState.phase = "scoring";
       }
-    } else if (move.type === "custom" && move.data.action === "score") {
+    } else if (move.type === "custom" && move.data["action"] === "score") {
       const { category } = move.data;
-      const score = this.calculateCategoryScore(newState.customState.dice, category);
+      const score = this.calculateCategoryScore(newState.customState["dice"], category);
 
-      if (!newState.customState.categories[player]) {
-        newState.customState.categories[player] = [];
-      }
-      newState.customState.categories[player].push(category);
+      const marcadas: string[] = newState.customState["categories"][player] ?? [];
+      marcadas.push(category);
+      newState.customState["categories"][player] = marcadas;
       newState.scores[player] = (newState.scores[player] || 0) + score;
 
       // Reseta para próximo turno
-      newState.customState.dice = [0, 0, 0, 0, 0];
-      newState.customState.rollsLeft = 3;
+      newState.customState["dice"] = [0, 0, 0, 0, 0];
+      newState.customState["rollsLeft"] = 3;
       newState.phase = "rolling";
 
       // Verifica fim de jogo (13 categorias)
-      if (newState.customState.categories[player].length >= 13) {
+      if ((newState.customState["categories"][player] ?? []).length >= 13) {
         const nextPlayer = (player + 1) % newState.players.length;
         if (nextPlayer === 0) {
           newState.gameOver = true;
@@ -270,7 +269,7 @@ export class YahtzeeAdapter implements UniversalGameEngine {
    */
   evaluate(state: UniversalGameState, player: number): number {
     const score = state.scores[player] || 0;
-    const categoriesMarked = state.customState.categories[player]?.length || 0;
+    const categoriesMarked = state.customState["categories"][player]?.length || 0;
     return score + categoriesMarked * 10;
   }
 

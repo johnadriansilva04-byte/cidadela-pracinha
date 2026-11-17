@@ -29,7 +29,7 @@ export class DominoAdapter implements UniversalGameEngine {
       turnOrder: Array.from({ length: playerCount }, (_, i) => i),
       board: { type: "custom", customState: {} },
       pieces: [],
-      deck: { cards: boneyard },
+      deck: boneyard,
       phase: "dealing",
       round: 1,
       scores: {},
@@ -77,7 +77,9 @@ export class DominoAdapter implements UniversalGameEngine {
     const shuffled = [...pieces];
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      const a = shuffled[i]!;
+      shuffled[i] = shuffled[j]!;
+      shuffled[j] = a;
     }
     return shuffled;
   }
@@ -91,7 +93,7 @@ export class DominoAdapter implements UniversalGameEngine {
 
     for (const player of newState.players) {
       for (let i = 0; i < piecesPerPlayer; i++) {
-        const piece = newState.customState.boneyard.pop();
+        const piece = newState.customState["boneyard"].pop();
         if (piece) {
           piece.owner = player.id;
           player.hand.push(piece);
@@ -109,7 +111,7 @@ export class DominoAdapter implements UniversalGameEngine {
   getValidMoves(state: UniversalGameState): GameMove[] {
     const moves: GameMove[] = [];
     const player = state.currentPlayer;
-    const hand = state.players[player].hand;
+    const hand = state.players[player]?.hand ?? [];
 
     if (state.phase === "dealing") {
       // Primeira jogada - qualquer peça
@@ -152,7 +154,7 @@ export class DominoAdapter implements UniversalGameEngine {
       }
 
       // Comprar do boneyard (se variante draw)
-      if (state.variant === "draw" && state.customState.boneyard.length > 0) {
+      if (state.variant === "draw" && state.customState["boneyard"].length > 0) {
         moves.push(UniversalGameUtils.createMove(player, "draw", { count: 1 }));
       }
 
@@ -179,18 +181,19 @@ export class DominoAdapter implements UniversalGameEngine {
 
     if (move.type === "draw") {
       // Compra peça
-      const piece = newState.customState.boneyard.pop();
+      const piece = newState.customState["boneyard"].pop();
       if (piece) {
         piece.owner = player;
-        newState.players[player].hand.push(piece);
+        newState.players[player]?.hand.push(piece);
       }
     } else if (move.type === "play") {
       const { pieceId, side, flipped } = move.data;
-      const pieceIndex = newState.players[player].hand.findIndex((p) => p.id === pieceId);
+      const mao = newState.players[player]?.hand ?? [];
+      const pieceIndex = mao.findIndex((p) => p.id === pieceId);
       if (pieceIndex === -1) return state;
 
-      const piece = newState.players[player].hand[pieceIndex]!;
-      newState.players[player].hand.splice(pieceIndex, 1);
+      const piece = mao[pieceIndex]!;
+      mao.splice(pieceIndex, 1);
 
       // Adiciona ao tabuleiro
       newState.pieces.push(piece);
@@ -198,24 +201,24 @@ export class DominoAdapter implements UniversalGameEngine {
       // Atualiza extremidades
       const { left, right } = piece.data;
       if (flipped) {
-        piece.data.left = right;
-        piece.data.right = left;
+        piece.data["left"] = right;
+        piece.data["right"] = left;
       }
 
       if (state.phase === "dealing" || newState.pieces.length === 1) {
-        newState.customState.leftEnd = piece.data.left;
-        newState.customState.rightEnd = piece.data.right;
+        newState.customState["leftEnd"] = piece.data["left"];
+        newState.customState["rightEnd"] = piece.data["right"];
       } else if (side === "left") {
-        newState.customState.leftEnd = piece.data.left;
+        newState.customState["leftEnd"] = piece.data["left"];
       } else {
-        newState.customState.rightEnd = piece.data.right;
+        newState.customState["rightEnd"] = piece.data["right"];
       }
     } else if (move.type === "pass") {
       // Passa turno
     }
 
     // Verifica vitória
-    if (newState.players[player].hand.length === 0) {
+    if ((newState.players[player]?.hand ?? []).length === 0) {
       newState.gameOver = true;
       newState.winner = player;
       newState.reason = "domino";
@@ -244,7 +247,7 @@ export class DominoAdapter implements UniversalGameEngine {
     let winner = 0;
 
     for (const player of state.players) {
-      const pips = player.hand.reduce((sum, piece) => sum + piece.data.left + piece.data.right, 0);
+      const pips = player.hand.reduce((sum, piece) => sum + piece.data["left"] + piece.data["right"], 0);
       if (pips < minPips) {
         minPips = pips;
         winner = player.id;
@@ -275,8 +278,8 @@ export class DominoAdapter implements UniversalGameEngine {
     if (state.gameOver && state.winner === player) return 100000;
     if (state.gameOver && state.winner !== null) return -100000;
 
-    const handPips = state.players[player].hand.reduce(
-      (sum, piece) => sum + piece.data.left + piece.data.right,
+    const handPips = (state.players[player]?.hand ?? []).reduce(
+      (sum, piece) => sum + piece.data["left"] + piece.data["right"],
       0
     );
 

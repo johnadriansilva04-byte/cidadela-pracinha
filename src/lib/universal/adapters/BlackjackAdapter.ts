@@ -30,7 +30,7 @@ export class BlackjackAdapter implements UniversalGameEngine {
       turnOrder: Array.from({ length: playerCount }, (_, i) => i),
       board: { type: "custom", customState: {} },
       pieces: [],
-      deck: { cards: shuffledDeck },
+      deck: shuffledDeck,
       phase: "betting",
       round: 1,
       scores: {},
@@ -79,7 +79,9 @@ export class BlackjackAdapter implements UniversalGameEngine {
     const shuffled = [...deck];
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      const a = shuffled[i]!;
+      shuffled[i] = shuffled[j]!;
+      shuffled[j] = a;
     }
     return shuffled;
   }
@@ -101,8 +103,8 @@ export class BlackjackAdapter implements UniversalGameEngine {
     let aces = 0;
 
     for (const card of hand) {
-      value += card.data.value;
-      if (card.data.rank === "A") aces++;
+      value += card.data["value"];
+      if (card.data["rank"] === "A") aces++;
     }
 
     // Ajusta Ás de 11 para 1 se estourar
@@ -120,7 +122,7 @@ export class BlackjackAdapter implements UniversalGameEngine {
   getValidMoves(state: UniversalGameState): GameMove[] {
     const moves: GameMove[] = [];
     const player = state.currentPlayer;
-    const hand = state.players[player].hand;
+    const hand = state.players[player]?.hand ?? [];
     const handValue = this.calculateHandValue(hand);
 
     if (state.phase === "betting") {
@@ -148,11 +150,12 @@ export class BlackjackAdapter implements UniversalGameEngine {
 
     if (move.type === "bet") {
       // Aposta
-      const amount = move.data.amount;
+      const amount = move.data["amount"];
       if (!newState.resources) newState.resources = {};
       if (!newState.resources[player]) newState.resources[player] = {};
-      newState.resources[player].chips = (newState.resources[player].chips || 1000) - amount;
-      newState.resources[player].currentBet = amount;
+      const rec = newState.resources[player]!;
+      rec["chips"] = (rec["chips"] || 1000) - amount;
+      rec["currentBet"] = amount;
 
       // Avança para o próximo jogador ou fase de jogo
       const nextPlayer = (player + 1) % newState.players.length;
@@ -165,19 +168,21 @@ export class BlackjackAdapter implements UniversalGameEngine {
       }
     } else if (move.type === "draw") {
       // Puxa carta
-      const card = newState.customState.deck.pop();
-      if (card) {
-        newState.players[player].hand.push(card);
+      const card = newState.customState["deck"].pop();
+      const jogador = newState.players[player];
+      if (card && jogador) {
+        jogador.hand.push(card);
       }
 
       // Verifica estouro
-      const handValue = this.calculateHandValue(newState.players[player].hand);
-      if (handValue > 21) {
-        newState.players[player].eliminated = true;
+      const handValue = this.calculateHandValue(jogador?.hand ?? []);
+      if (handValue > 21 && jogador) {
+        jogador.eliminated = true;
       }
     } else if (move.type === "pass") {
       // Passa (stand)
-      newState.players[player].eliminated = true; // Marcado como "parou"
+      const quemParou = newState.players[player];
+      if (quemParou) quemParou.eliminated = true; // Marcado como "parou"
     }
 
     newState.moveHistory.push(move);
@@ -204,17 +209,17 @@ export class BlackjackAdapter implements UniversalGameEngine {
     // 2 cartas para cada jogador
     for (const player of state.players) {
       for (let i = 0; i < 2; i++) {
-        const card = state.customState.deck.pop();
+        const card = state.customState["deck"].pop();
         if (card) player.hand.push(card);
       }
     }
 
     // 2 cartas para o dealer (1 virada)
     for (let i = 0; i < 2; i++) {
-      const card = state.customState.deck.pop();
+      const card = state.customState["deck"].pop();
       if (card) {
-        card.data.faceUp = i === 0; // Primeira carta virada
-        state.customState.dealerHand.push(card);
+        card.data["faceUp"] = i === 0; // Primeira carta virada
+        state.customState["dealerHand"].push(card);
       }
     }
   }
@@ -223,16 +228,16 @@ export class BlackjackAdapter implements UniversalGameEngine {
    * Dealer joga até 17 ou mais.
    */
   private playDealer(state: UniversalGameState): void {
-    while (this.calculateHandValue(state.customState.dealerHand) < 17) {
-      const card = state.customState.deck.pop();
+    while (this.calculateHandValue(state.customState["dealerHand"]) < 17) {
+      const card = state.customState["deck"].pop();
       if (card) {
-        card.data.faceUp = true;
-        state.customState.dealerHand.push(card);
+        card.data["faceUp"] = true;
+        state.customState["dealerHand"].push(card);
       }
     }
 
     // Determina vencedores
-    const dealerValue = this.calculateHandValue(state.customState.dealerHand);
+    const dealerValue = this.calculateHandValue(state.customState["dealerHand"]);
     const dealerBusted = dealerValue > 21;
 
     for (const player of state.players) {
@@ -282,7 +287,7 @@ export class BlackjackAdapter implements UniversalGameEngine {
    * Avaliação heurística (simplificada para blackjack).
    */
   evaluate(state: UniversalGameState, player: number): number {
-    const handValue = this.calculateHandValue(state.players[player].hand);
+    const handValue = this.calculateHandValue(state.players[player]?.hand ?? []);
     if (handValue > 21) return -100;
     if (handValue === 21) return 100;
     return handValue;

@@ -15,7 +15,7 @@ export interface ChessState extends UniversalGameState {
   };
 }
 
-export interface ChessMove extends GameMove {
+export interface ChessMove extends Omit<GameMove, "type"> {
   type: "move" | "capture" | "castle" | "en_passant" | "promotion";
   from: string;
   to: string;
@@ -140,8 +140,10 @@ export class ChessAdapter implements UniversalGameEngine {
   private getPieceMoves(state: UniversalGameState, piece: GamePiece): GameMove[] {
     const moves: GameMove[] = [];
     const { x, y } = piece.position as { x: number; y: number };
-    const pieceType = piece.data.pieceType;
-    const player = piece.owner;
+    const pieceType = piece.data["pieceType"];
+    // `owner` é `number | null` no tipo base, mas peça de xadrez sempre tem
+    // dono; sem o fallback o índice de jogador vira `number | null`.
+    const player = piece.owner ?? 0;
     const direction = player === 0 ? 1 : -1; // Brancas sobem, pretas descem
 
     switch (pieceType) {
@@ -212,7 +214,7 @@ export class ChessAdapter implements UniversalGameEngine {
         for (const [dx, dy] of [
           [0, 1], [0, -1], [1, 0], [-1, 0],
           [1, 1], [1, -1], [-1, 1], [-1, -1],
-        ]) {
+        ] as const) {
           const newX = x + dx;
           const newY = y + dy;
           if (this.isValidPosition(newX, newY)) {
@@ -235,7 +237,7 @@ export class ChessAdapter implements UniversalGameEngine {
         for (const [dx, dy] of [
           [2, 1], [2, -1], [-2, 1], [-2, -1],
           [1, 2], [1, -2], [-1, 2], [-1, -2],
-        ]) {
+        ] as const) {
           const newX = x + dx;
           const newY = y + dy;
           if (this.isValidPosition(newX, newY)) {
@@ -262,9 +264,9 @@ export class ChessAdapter implements UniversalGameEngine {
    */
   private addLineMoves(state: UniversalGameState, piece: GamePiece, moves: GameMove[], directions: number[][]): void {
     const { x, y } = piece.position as { x: number; y: number };
-    const player = piece.owner;
+    const player = piece.owner ?? 0;
 
-    for (const [dx, dy] of directions) {
+    for (const [dx, dy] of directions as Array<[number, number]>) {
       let newX = x + dx;
       let newY = y + dy;
 
@@ -275,7 +277,7 @@ export class ChessAdapter implements UniversalGameEngine {
             UniversalGameUtils.createMove(player, "move", {
               from: piece.id,
               to: `${newX}-${newY}`,
-              piece: piece.data.pieceType,
+              piece: piece.data["pieceType"],
             })
           );
         } else {
@@ -284,7 +286,7 @@ export class ChessAdapter implements UniversalGameEngine {
               UniversalGameUtils.createMove(player, "capture", {
                 from: piece.id,
                 to: `${newX}-${newY}`,
-                piece: piece.data.pieceType,
+                piece: piece.data["pieceType"],
               })
             );
           }
@@ -336,23 +338,24 @@ export class ChessAdapter implements UniversalGameEngine {
       if (capturedIndex !== -1) {
         const captured = newState.pieces[capturedIndex]!;
         newState.pieces.splice(capturedIndex, 1);
-        newState.players[newState.currentPlayer].captured.push(captured);
+        const captor = newState.players[newState.currentPlayer];
+        if (captor) captor.captured.push(captured);
       }
     }
 
     // Move a peça
     const [toX, toY] = to.split("-").map(Number);
-    movedPiece.position = { x: toX, toY };
+    movedPiece.position = { x: toX ?? 0, y: toY ?? 0 };
 
     // Verifica promoção de peão
     if (piece === "pawn" && (toY === 0 || toY === 7)) {
-      movedPiece.data.pieceType = "queen"; // Promoção automática para rainha
+      movedPiece.data["pieceType"] = "queen"; // Promoção automática para rainha
     }
 
     // Verifica xeque-mate (simplificado)
     const opponent = newState.currentPlayer === 0 ? 1 : 0;
     const opponentKing = newState.pieces.find(
-      (p) => p.owner === opponent && p.data.pieceType === "king"
+      (p) => p.owner === opponent && p.data["pieceType"] === "king"
     );
     if (!opponentKing) {
       newState.gameOver = true;
@@ -402,9 +405,9 @@ export class ChessAdapter implements UniversalGameEngine {
     let score = 0;
     for (const piece of state.pieces) {
       if (piece.owner === player) {
-        score += pieceValues[piece.data.pieceType] || 0;
+        score += pieceValues[piece.data["pieceType"]] || 0;
       } else {
-        score -= pieceValues[piece.data.pieceType] || 0;
+        score -= pieceValues[piece.data["pieceType"]] || 0;
       }
     }
 

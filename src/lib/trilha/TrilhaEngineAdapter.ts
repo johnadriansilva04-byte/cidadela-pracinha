@@ -47,7 +47,9 @@ export class TrilhaAdapter implements GameEngine<TrilhaState, TrilhaMove> {
    * Reutiliza a função evaluate() existente do ai.ts da Trilha.
    */
   evaluate(state: TrilhaState, player: number): number {
-    return trilhaEvaluate(state, player);
+    // A engine da Trilha só conhece os assentos 1 e 2; o contrato genérico
+    // fala em `number`, então normalizamos antes de delegar.
+    return trilhaEvaluate(state, player === 2 ? 2 : 1);
   }
 
   /**

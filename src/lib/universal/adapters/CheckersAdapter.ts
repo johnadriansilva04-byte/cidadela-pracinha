@@ -104,7 +104,7 @@ export class CheckersAdapter implements UniversalGameEngine {
     }
 
     // Captura obrigatória
-    if (state.customState.mandatoryCapture && captureMoves.length > 0) {
+    if (state.customState["mandatoryCapture"] && captureMoves.length > 0) {
       return captureMoves;
     }
 
@@ -117,12 +117,12 @@ export class CheckersAdapter implements UniversalGameEngine {
   private getPieceMoves(state: UniversalGameState, piece: GamePiece): GameMove[] {
     const moves: GameMove[] = [];
     const { x, y } = piece.position as { x: number; y: number };
-    const player = piece.owner;
-    const isKing = piece.data.isKing;
+    const player = piece.owner ?? 0;
+    const isKing = piece.data["isKing"] === true;
     const direction = player === 0 ? 1 : -1; // Vermelho sobe, preto desce
 
     // Movimentos diagonais
-    const directions = isKing
+    const directions: Array<[number, number]> = isKing
       ? [[1, 1], [1, -1], [-1, 1], [-1, -1]]
       : [[1, direction], [-1, direction]];
 
@@ -201,14 +201,14 @@ export class CheckersAdapter implements UniversalGameEngine {
       if (capturedIndex !== -1) {
         const capturedPiece = newState.pieces[capturedIndex]!;
         newState.pieces.splice(capturedIndex, 1);
-        newState.players[player].captured.push(capturedPiece);
+        newState.players[player]?.captured.push(capturedPiece);
       }
     }
 
     // Promoção a dama
     const promotionRow = player === 0 ? 7 : 0;
-    if (toY === promotionRow && !piece.data.isKing) {
-      piece.data.isKing = true;
+    if (toY === promotionRow && !piece.data["isKing"]) {
+      piece.data["isKing"] = true;
     }
 
     // Verifica vitória
@@ -256,10 +256,10 @@ export class CheckersAdapter implements UniversalGameEngine {
 
     // Bonus por damas
     for (const piece of playerPieces) {
-      if (piece.data.isKing) score += 5;
+      if (piece.data["isKing"]) score += 5;
     }
     for (const piece of opponentPieces) {
-      if (piece.data.isKing) score -= 5;
+      if (piece.data["isKing"]) score -= 5;
     }
 
     return score;
