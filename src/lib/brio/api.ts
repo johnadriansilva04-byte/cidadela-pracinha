@@ -13,6 +13,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { ACERVO_BRIO_EQUILIBRADO, GABARITO_LOCAL } from "./acervo";
 import { AREAS } from "./categorias";
+import { DUELO } from "./types";
 import type { Letra } from "./types";
 
 /** Resultado genérico de RPC (tipos do Supabase não conhecem as RPCs brio_*). */
@@ -155,8 +156,8 @@ export async function criarPartida(opcoes: OpcoesPartida): Promise<EstadoPartida
     p_area_slug: opcoes.areaSlug ?? null,
     p_subcategoria_slug: opcoes.subcategoriaSlug ?? null,
     p_bot_nivel: opcoes.botNivel ?? null,
-    p_total: opcoes.total ?? 10,
-    p_segundos: opcoes.segundos ?? 7,
+    p_total: opcoes.total ?? DUELO.PERGUNTAS_POR_PARTIDA,
+    p_segundos: opcoes.segundos ?? DUELO.SEGUNDOS_POR_PERGUNTA,
     p_aberta: opcoes.aberta ?? false,
   });
   if (error || !data) return null;
