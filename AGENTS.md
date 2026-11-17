@@ -1,3 +1,39 @@
+## Guerra de Brio — duelo intelectual 1×1 na Cidadela (2026-11-17)
+
+Módulo NOVO dentro da área de jogos existente (não é plataforma nova):
+`src/lib/brio/` (núcleo puro) + `src/components/brio/` (UI), card "Guerra de
+Brio" em `GAMES` de `src/routes/cidadela.tsx`, migration própria
+`supabase/migrations/guerra_de_brio.sql`.
+
+- **Três motores**: perguntas (acervo + seleção antirrepetição), duelo
+  sincronizado pelo servidor e avaliação TRI (`theta`, discriminação,
+  dificuldade, acerto casual 1/6). Pontuação da partida e Índice de
+  Conhecimento são métricas SEPARADAS — nunca apresentar como QI oficial.
+- **Dois modos**: adversário virtual (4 níveis; roda local sem backend) e
+  **convite entre dois humanos** (`p_aberta`). O convite exige conta e
+  backend ativo; sem eles o lobby nem mostra o seletor.
+- **Sala de convite**: `brio_criar_partida(..., p_aberta => true)` cria a
+  partida `aguardando` com `rodada_atual=0` e o relógio da rodada 1 só começa
+  em `brio_entrar_partida` (quando o convidado ocupa o assento 2). Link
+  direto `?brio=<id>` — mesmo padrão de `?mesa=`/`?camp=`/`?mesaTrilha=`.
+- **O servidor é a autoridade**: sorteio, relógio de 7s, registro imutável da
+  resposta, revelação e pontuação. `brio_estado_partida` NUNCA devolve a letra
+  correta nem a resposta do adversário antes da revelação da rodada.
+- **Sincronização no cliente**: polling de 1,5s em `estadoPartida`. Como
+  `brio_fechar_rodada` AVANÇA `rodada_atual`, a rodada recém-apurada é
+  `rodada_atual - 1`; `revelacaoVistaRef` impede que a revelação reabra depois
+  de vista. A última rodada vai direto ao resultado.
+- **Alimentação do acervo**: `brio_importar_lote` (lotes em rascunho) +
+  `brio_aprovar_perguntas` (revisão factual antes de publicar) +
+  `brio_calibracao`. Só `ativa AND status='aprovada'` entra nas partidas.
+  O seed (49 perguntas / 10 áreas) é gerado por `testes/gerador-brio-seed.mts`,
+  que REGRAVA a migration — editar o template do gerador, nunca só o .sql.
+- **Testes**: `testes/brio-nucleo.test.mts` (86 invariantes do núcleo),
+  `testes/brio-convite-estrutural.test.mjs` (31 guardas do contrato
+  SQL↔cliente) e `testes/e2e-guerra-de-brio.mjs` (24 checks no navegador,
+  contra `testes/serve-build.mjs`). `tsc --noEmit` mantém o baseline de 240
+  erros pré-existentes; `npm run build` OK.
+
 ## Módulo "Teste de QI" na home + UI profissional (2026-08-28, 32ª passada)
 
 - **Teste de QI movido para a HOME** (`/`): card "Teste de QI" (ícone brain,

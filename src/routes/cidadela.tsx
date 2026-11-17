@@ -1,12 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useEffect, useRef } from "react";
-import { Target, Trophy, Crown, Grid3X3, IdCard } from "lucide-react";
+import { Target, Trophy, Crown, Grid3X3, IdCard, Brain } from "lucide-react";
 import { TrilhaGame } from "@/components/trilha/TrilhaGame";
 import { TrilhaLoadingScreen } from "@/components/trilha/TrilhaLoadingScreen";
 import { TrilhaOnlineLobby } from "@/components/trilha/TrilhaOnlineLobby";
 import { BotaoGame } from "@/components/botao/BotaoGame";
 import { ConviteMesaScreen } from "@/components/botao/online/ConviteMesaScreen";
 import { CarBrawlGame } from "@/components/carbrawl/CarBrawlGame";
+import { GuerraDeBrio } from "@/components/brio/GuerraDeBrio";
 import { CarBrawlLoadingScreen } from "@/components/carbrawl/CarBrawlLoadingScreen";
 import { OnboardingGate } from "@/components/cidadela/OnboardingGate";
 import { TourContextual, type PassoTour } from "@/components/cidadela/TourContextual";
@@ -80,6 +81,7 @@ type Game =
   | "blackjack"
   | "domino"
   | "yahtzee"
+  | "brio"
   | null;
 
 const GAMES = [
@@ -139,6 +141,13 @@ const GAMES = [
     icon: Target,
     status: "disponível",
   },
+  {
+    id: "brio" as Game,
+    label: "Guerra de Brio",
+    description: "Duelo de conhecimento",
+    icon: Brain,
+    status: "disponível",
+  },
 ];
 
 function CidadelaCompView() {
@@ -159,6 +168,11 @@ function CidadelaCompView() {
   const [conviteMesaTrilhaId, setConviteMesaTrilhaId] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     return new URLSearchParams(window.location.search).get("mesaTrilha");
+  });
+  // §link-brio: convite de duelo (?brio=<id>) — entra direto na sala.
+  const [conviteBrioId, setConviteBrioId] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return new URLSearchParams(window.location.search).get("brio");
   });
   const passosTour: PassoTour[] =
     activeGame === "botao" ? PASSOS_TOUR_FUTEBOL : activeGame === "trilha" ? PASSOS_TOUR_TRILHA : [];
@@ -304,6 +318,11 @@ function CidadelaCompView() {
     }
     // Jogos do sistema universal
     if (game === "xadrez" || game === "dama" || game === "blackjack" || game === "domino" || game === "yahtzee") {
+      setActiveGame(game);
+      return;
+    }
+    // Guerra de Brio: duelo intelectual 1×1 (módulo próprio, mesma sessão).
+    if (game === "brio") {
       setActiveGame(game);
       return;
     }
@@ -491,6 +510,20 @@ function CidadelaCompView() {
 
   if (activeGame === "yahtzee") {
     return <YahtzeeGameView onBack={() => setActiveGame(null)} />;
+  }
+
+  if (activeGame === "brio" || conviteBrioId) {
+    return (
+      <GuerraDeBrio
+        userId={perfil?.user_id ?? null}
+        nomeJogador={perfil?.nome || perfil?.time_personalizado || "Competidor"}
+        conviteInicial={conviteBrioId}
+        onBack={() => {
+          setConviteBrioId(null);
+          setActiveGame(null);
+        }}
+      />
+    );
   }
 
   return (
