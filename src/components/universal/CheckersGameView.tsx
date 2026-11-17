@@ -9,14 +9,20 @@ import {
   lerTabuleiro,
 } from "@/lib/universal/estadoTabuleiro";
 import { MCTS } from "@/lib/ai/MCTS";
+import { useFimDeJogo } from "@/lib/universal/useFimDeJogo";
+import type { ResultadoPartida } from "@/lib/universal/campanhaJogos";
 
 interface CheckersGameViewProps {
   onBack: () => void;
+  /** Força da IA da fase da campanha (ausente = partida avulsa). */
+  forca?: { maxIterations: number; timeBudgetMs: number } | undefined;
+  /** Avisa a campanha do resultado da partida (uma vez por partida). */
+  onFim?: ((resultado: ResultadoPartida) => void) | undefined;
 }
 
 const JOGO = "board_checkers";
 
-export function CheckersGameView({ onBack }: CheckersGameViewProps) {
+export function CheckersGameView({ onBack, forca, onFim }: CheckersGameViewProps) {
   const [gameState, setGameState] = useState<UniversalGameState | null>(() =>
     UniversalGameFactory.createGame(JOGO, 2),
   );
@@ -34,6 +40,9 @@ export function CheckersGameView({ onBack }: CheckersGameViewProps) {
   const acabou = engine && gameState ? engine.isGameOver(gameState) : false;
   const vencedor = acabou && engine && gameState ? engine.getWinner(gameState) : null;
 
+  // Reporta o fim à campanha (uma única vez por partida).
+  useFimDeJogo(acabou, vencedor, onFim);
+
   // Origem = id da peça; destino = "x-y".
   const destinos = useMemo(
     () => destinosDaCasa(movimentos, selecionada ?? undefined),
@@ -45,13 +54,16 @@ export function CheckersGameView({ onBack }: CheckersGameViewProps) {
       if (!engine || engine.isGameOver(estado)) return;
       setIaPensando(true);
       window.setTimeout(() => {
-        const mcts = new MCTS(engine, { maxIterations: 3000, timeBudgetMs: 1500 });
+        const mcts = new MCTS(
+          engine,
+          forca ?? { maxIterations: 3000, timeBudgetMs: 1500 },
+        );
         const escolha = mcts.computeMove(estado, 1);
         setGameState(escolha.move ? engine.applyMove(estado, escolha.move) : estado);
         setIaPensando(false);
       }, 300);
     },
-    [engine],
+    [engine, forca],
   );
 
   const clicar = (x: number, y: number) => {

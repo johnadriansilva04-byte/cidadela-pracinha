@@ -75,6 +75,20 @@ migração é aplicada **manualmente** colando o conteúdo do arquivo no
     nega anon. **Sem ela, a simulação degrada com segurança** (o app usa
     banco local determinístico + resultado local avisando que não persiste).
 
+15. `jogos_campanha_ranking.sql` — **CAMPANHA + RANKING DOS JOGOS**
+    (2026-11-17): dá a cada jogo da Cidadela uma campanha com fases,
+    patrono e história (`cidadela_perfis.estado.jogos`, JSONB — nenhuma
+    tabela nova de perfil) e um ranking por jogo
+    (`cidadela_ranking_jogos`, RLS `user_id = auth.uid()`). RPCs:
+    `cidadela_gerar_missoes_diarias` (missões do dia por profissão),
+    `cidadela_registrar_resultado_jogo` (grava vitória/derrota/empate +
+    sequência, idempotente por `partida_id`), `cidadela_ranking_do_jogo`
+    (**público** — `anon` + `authenticated`; expõe só o nome de exibição,
+    nunca dado pessoal) e `cidadela_meu_recorde_jogo`. O SOV da campanha é
+    pago pelo SOV BANK com chave idempotente `jogo:{jogo}:fase:{n}` — uma
+    fase paga UMA vez, mesmo com F5 ou clique repetido. **Sem ela, o jogo
+    continua jogável**, mas a fase não persiste e o ranking não aparece.
+
 ## Como verificar se o SOV BANK está operacional
 
 Após aplicar `sov_bank.sql`, rode no SQL Editor:

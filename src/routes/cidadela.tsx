@@ -40,6 +40,7 @@ import { CheckersGameView } from "@/components/universal/CheckersGameView";
 import { BlackjackGameView } from "@/components/universal/BlackjackGameView";
 import { DominoGameView } from "@/components/universal/DominoGameView";
 import { YahtzeeGameView } from "@/components/universal/YahtzeeGameView";
+import { JogoComCampanha } from "@/components/universal/JogoComCampanha";
 import { GradeJogos } from "@/components/cidadela/GradeJogos";
 
 export const Route = createFileRoute("/cidadela")({
@@ -535,23 +536,103 @@ function CidadelaCompView() {
   }
 
   if (activeGame === "xadrez") {
-    return <ChessGameView onBack={() => setActiveGame(null)} />;
+    return (
+      <JogoComCampanha
+        jogoId="xadrez"
+        userId={perfil?.user_id ?? null}
+        nomeExibicao={perfil?.nome ?? null}
+        onSair={() => setActiveGame(null)}
+      >
+        {({ forca, onFim, keyPartida }) => (
+          <ChessGameView
+            key={keyPartida}
+            onBack={() => setActiveGame(null)}
+            forca={forca}
+            onFim={onFim}
+          />
+        )}
+      </JogoComCampanha>
+    );
   }
 
   if (activeGame === "dama") {
-    return <CheckersGameView onBack={() => setActiveGame(null)} />;
+    return (
+      <JogoComCampanha
+        jogoId="dama"
+        userId={perfil?.user_id ?? null}
+        nomeExibicao={perfil?.nome ?? null}
+        onSair={() => setActiveGame(null)}
+      >
+        {({ forca, onFim, keyPartida }) => (
+          <CheckersGameView
+            key={keyPartida}
+            onBack={() => setActiveGame(null)}
+            forca={forca}
+            onFim={onFim}
+          />
+        )}
+      </JogoComCampanha>
+    );
   }
 
   if (activeGame === "blackjack") {
-    return <BlackjackGameView onBack={() => setActiveGame(null)} />;
+    return (
+      <JogoComCampanha
+        jogoId="blackjack"
+        userId={perfil?.user_id ?? null}
+        nomeExibicao={perfil?.nome ?? null}
+        onSair={() => setActiveGame(null)}
+      >
+        {({ forca, onFim, keyPartida }) => (
+          <BlackjackGameView
+            key={keyPartida}
+            onBack={() => setActiveGame(null)}
+            forca={forca}
+            onFim={onFim}
+          />
+        )}
+      </JogoComCampanha>
+    );
   }
 
   if (activeGame === "domino") {
-    return <DominoGameView onBack={() => setActiveGame(null)} />;
+    return (
+      <JogoComCampanha
+        jogoId="domino"
+        userId={perfil?.user_id ?? null}
+        nomeExibicao={perfil?.nome ?? null}
+        onSair={() => setActiveGame(null)}
+      >
+        {({ forca, onFim, keyPartida }) => (
+          <DominoGameView
+            key={keyPartida}
+            onBack={() => setActiveGame(null)}
+            forca={forca}
+            onFim={onFim}
+          />
+        )}
+      </JogoComCampanha>
+    );
   }
 
   if (activeGame === "yahtzee") {
-    return <YahtzeeGameView onBack={() => setActiveGame(null)} />;
+    return (
+      <JogoComCampanha
+        jogoId="yahtzee"
+        userId={perfil?.user_id ?? null}
+        nomeExibicao={perfil?.nome ?? null}
+        onSair={() => setActiveGame(null)}
+      >
+        {({ forca, onFim, keyPartida }) => (
+          <YahtzeeGameView
+            key={keyPartida}
+            onBack={() => setActiveGame(null)}
+            forca={forca}
+            onFim={onFim}
+          />
+        )}
+      </JogoComCampanha>
+    );
   }
 
   if (activeGame === "brio" || conviteBrioId) {

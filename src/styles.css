@@ -2982,3 +2982,461 @@ button.celular-card:hover {
     transform: none;
   }
 }
+
+/* ==========================================================================
+   CAMPANHA DOS JOGOS — painel de fase e tela de fim de partida
+   Mantém o vocabulário visual da grade (acento neon, cartões escuros,
+   tipografia display). Aqui o acento é o próprio jogo, via --jc-cor.
+   ========================================================================== */
+.jcamp-wrap,
+.jfim-wrap {
+  --jc-cor: var(--primary);
+  --jc-cor2: var(--primary);
+  width: 100%;
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 1rem 1rem 3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  color: var(--foreground);
+}
+
+/* ---------- Painel de campanha ---------- */
+.jcamp-topo {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.jcamp-voltar {
+  border: 1px solid color-mix(in oklab, var(--foreground) 18%, transparent);
+  background: color-mix(in oklab, var(--foreground) 6%, transparent);
+  color: var(--foreground);
+  border-radius: 999px;
+  padding: 0.35rem 0.8rem;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.jcamp-voltar:hover {
+  background: color-mix(in oklab, var(--foreground) 12%, transparent);
+}
+.jcamp-titulo {
+  flex: 1;
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  margin: 0;
+}
+.jcamp-fase-chip {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--jc-cor) 22%, transparent);
+  border: 1px solid color-mix(in oklab, var(--jc-cor) 45%, transparent);
+  color: var(--foreground);
+  white-space: nowrap;
+}
+
+.jcamp-barra {
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--foreground) 10%, transparent);
+  overflow: hidden;
+}
+.jcamp-barra-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--jc-cor), var(--jc-cor2));
+  box-shadow: 0 0 14px color-mix(in oklab, var(--jc-cor) 60%, transparent);
+  transition: width 0.4s ease;
+}
+
+.jcamp-fase {
+  border-radius: 1rem;
+  padding: 1rem;
+  background: linear-gradient(
+    160deg,
+    color-mix(in oklab, var(--jc-cor) 14%, transparent),
+    color-mix(in oklab, var(--foreground) 4%, transparent)
+  );
+  border: 1px solid color-mix(in oklab, var(--jc-cor) 30%, transparent);
+}
+.jcamp-fase-topo {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin-bottom: 0.7rem;
+}
+.jcamp-avatar {
+  font-size: 1.7rem;
+  line-height: 1;
+}
+.jcamp-patrono {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: color-mix(in oklab, var(--foreground) 62%, transparent);
+  margin: 0;
+}
+.jcamp-fase-titulo {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 0;
+}
+.jcamp-selo-concluida {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  background: color-mix(in oklab, #facc15 22%, transparent);
+  border: 1px solid color-mix(in oklab, #facc15 45%, transparent);
+  color: #fde68a;
+}
+.jcamp-historia {
+  font-size: 0.9rem;
+  line-height: 1.6;
+  font-style: italic;
+  color: color-mix(in oklab, var(--foreground) 88%, transparent);
+  margin: 0 0 0.85rem;
+}
+.jcamp-metas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+.jcamp-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.74rem;
+  padding: 0.28rem 0.6rem;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--foreground) 8%, transparent);
+  border: 1px solid color-mix(in oklab, var(--foreground) 12%, transparent);
+}
+
+.jcamp-jogar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.95rem 1rem;
+  border-radius: 0.9rem;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: #08121f;
+  background: linear-gradient(120deg, var(--jc-cor), var(--jc-cor2));
+  box-shadow: 0 0 22px color-mix(in oklab, var(--jc-cor) 45%, transparent);
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
+}
+.jcamp-jogar:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 32px color-mix(in oklab, var(--jc-cor) 65%, transparent);
+}
+
+.jcamp-secao {
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: color-mix(in oklab, var(--foreground) 70%, transparent);
+  margin: 0 0 0.6rem;
+}
+.jcamp-placar-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+}
+.jcamp-tile {
+  border-radius: 0.75rem;
+  padding: 0.7rem 0.5rem;
+  text-align: center;
+  background: color-mix(in oklab, var(--foreground) 6%, transparent);
+  border: 1px solid color-mix(in oklab, var(--foreground) 10%, transparent);
+}
+.jcamp-tile-num {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  font-weight: 800;
+}
+.jcamp-tile-rot {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: color-mix(in oklab, var(--foreground) 58%, transparent);
+}
+
+.jcamp-ranking-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.jcamp-ranking-lista li {
+  display: grid;
+  grid-template-columns: 2.2rem 1fr auto auto;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 0.6rem;
+  font-size: 0.82rem;
+  background: color-mix(in oklab, var(--foreground) 5%, transparent);
+  border: 1px solid color-mix(in oklab, var(--foreground) 9%, transparent);
+}
+.jcamp-ranking-lista li.jcamp-rank-eu {
+  border-color: color-mix(in oklab, var(--jc-cor) 55%, transparent);
+  background: color-mix(in oklab, var(--jc-cor) 16%, transparent);
+}
+.jcamp-rank-pos {
+  font-weight: 800;
+  color: color-mix(in oklab, var(--foreground) 62%, transparent);
+}
+.jcamp-rank-nome {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.jcamp-rank-vit {
+  font-weight: 700;
+  color: #6ee7b7;
+}
+.jcamp-rank-seq {
+  font-size: 0.72rem;
+  color: color-mix(in oklab, var(--foreground) 55%, transparent);
+}
+.jcamp-ranking-vazio,
+.jcamp-rodape {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.76rem;
+  color: color-mix(in oklab, var(--foreground) 58%, transparent);
+  margin: 0;
+}
+.jcamp-rodape {
+  text-align: center;
+  justify-content: center;
+}
+
+/* ---------- Fim de partida ---------- */
+.jfim-wrap {
+  align-items: center;
+  text-align: center;
+  padding-top: 2rem;
+}
+.jfim-emoji {
+  font-size: 3.4rem;
+  line-height: 1;
+  animation: jfim-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.jfim-titulo {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+.jfim-vitoria .jfim-titulo {
+  color: #6ee7b7;
+  text-shadow: 0 0 26px color-mix(in oklab, #6ee7b7 45%, transparent);
+}
+.jfim-derrota .jfim-titulo {
+  color: #fca5a5;
+}
+.jfim-empate .jfim-titulo {
+  color: #fcd34d;
+}
+.jfim-carregando {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.82rem;
+  color: color-mix(in oklab, var(--foreground) 62%, transparent);
+}
+
+.jfim-historia {
+  display: flex;
+  gap: 0.7rem;
+  text-align: left;
+  width: 100%;
+  border-radius: 1rem;
+  padding: 0.9rem 1rem;
+  background: color-mix(in oklab, var(--foreground) 6%, transparent);
+  border: 1px solid color-mix(in oklab, var(--foreground) 12%, transparent);
+}
+.jfim-avatar {
+  font-size: 1.6rem;
+  line-height: 1;
+}
+.jfim-patrono {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: color-mix(in oklab, var(--foreground) 60%, transparent);
+  margin: 0 0 0.2rem;
+}
+.jfim-fala {
+  font-size: 0.9rem;
+  line-height: 1.55;
+  font-style: italic;
+  margin: 0;
+}
+
+.jfim-premios {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  justify-content: center;
+}
+.jfim-premio {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  animation: jfim-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+.jfim-premio-sov {
+  background: color-mix(in oklab, #fbbf24 22%, transparent);
+  border: 1px solid color-mix(in oklab, #fbbf24 45%, transparent);
+  color: #fde68a;
+}
+.jfim-premio-fase {
+  background: color-mix(in oklab, #38bdf8 20%, transparent);
+  border: 1px solid color-mix(in oklab, #38bdf8 45%, transparent);
+  color: #bae6fd;
+}
+.jfim-premio-campeao {
+  background: color-mix(in oklab, #a78bfa 22%, transparent);
+  border: 1px solid color-mix(in oklab, #a78bfa 45%, transparent);
+  color: #ddd6fe;
+}
+.jfim-premio-seq {
+  background: color-mix(in oklab, #fb923c 20%, transparent);
+  border: 1px solid color-mix(in oklab, #fb923c 45%, transparent);
+  color: #fed7aa;
+}
+
+.jfim-proximo {
+  width: 100%;
+  border-radius: 0.9rem;
+  padding: 0.8rem 1rem;
+  text-align: left;
+  background: color-mix(in oklab, var(--foreground) 5%, transparent);
+  border: 1px dashed color-mix(in oklab, var(--foreground) 18%, transparent);
+}
+.jfim-proximo-rot {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: color-mix(in oklab, var(--foreground) 55%, transparent);
+  margin: 0 0 0.25rem;
+}
+.jfim-proximo-titulo {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.95rem;
+  margin: 0;
+}
+.jfim-proximo-obj {
+  font-size: 0.76rem;
+  color: color-mix(in oklab, var(--foreground) 65%, transparent);
+  margin: 0.15rem 0 0;
+}
+.jfim-recorde {
+  font-size: 0.74rem;
+  color: color-mix(in oklab, var(--foreground) 55%, transparent);
+  margin: 0;
+}
+
+.jfim-botoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  justify-content: center;
+  width: 100%;
+}
+.jfim-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.75rem 1.1rem;
+  border-radius: 0.8rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--foreground);
+  background: color-mix(in oklab, var(--foreground) 8%, transparent);
+  border: 1px solid color-mix(in oklab, var(--foreground) 16%, transparent);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+.jfim-btn:hover {
+  transform: translateY(-1px);
+  background: color-mix(in oklab, var(--foreground) 14%, transparent);
+}
+.jfim-btn-primario {
+  color: #08121f;
+  background: linear-gradient(120deg, #6ee7b7, #38bdf8);
+  border: none;
+}
+.jfim-btn-primario:hover {
+  background: linear-gradient(120deg, #34d399, #0ea5e9);
+}
+
+@keyframes jfim-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (max-width: 480px) {
+  .jcamp-titulo {
+    font-size: 1.25rem;
+  }
+  .jcamp-ranking-lista li {
+    grid-template-columns: 1.8rem 1fr auto;
+  }
+  .jcamp-rank-seq {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jfim-emoji,
+  .jfim-premio {
+    animation: none !important;
+  }
+  .jcamp-jogar:hover,
+  .jfim-btn:hover {
+    transform: none;
+  }
+}

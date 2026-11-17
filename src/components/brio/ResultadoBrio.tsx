@@ -16,6 +16,8 @@ import {
 import { AREAS } from "@/lib/brio/categorias";
 import { rotuloIndice } from "@/lib/brio/tri";
 import { aproveitamento, vencedorDoPlacar } from "@/lib/brio/duelo";
+import { registrarEventoMissao } from "@/lib/cidadela/pracinhaCore";
+import { supabase } from "@/integrations/supabase/client";
 
 interface ResultadoProps {
   visao: {
@@ -75,6 +77,23 @@ export function ResultadoBrio({
   }, [visao, meuId]);
 
   const [locais, setLocais] = useState<HabilidadeLinha[]>([]);
+
+  // Missão diária + ranking do duelo. Roda UMA vez por resultado (o efeito
+  // depende do id da partida, não do render).
+  useEffect(() => {
+    void registrarEventoMissao("brio_duelo" as never).catch(() => null);
+    if (veredito === "vitoria") {
+      void registrarEventoMissao("brio_vitoria" as never).catch(() => null);
+    }
+    void Promise.resolve(
+      supabase.rpc("cidadela_registrar_resultado_jogo", {
+        p_jogo_id: "brio",
+        p_resultado: veredito,
+        p_nome_exibicao: nomeEu ?? null,
+      }),
+    ).catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Em modo servidor, o resultado pede o recálculo da TRI (a autoridade é o
   // servidor). Em modo local não há histórico no banco: mostramos só o geral.

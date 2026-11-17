@@ -1310,6 +1310,25 @@ export type Database = {
         Args: Record<never, never>;
         Returns: Json;
       };
+      cidadela_registrar_resultado_jogo: {
+        Args: { p_jogo_id: string; p_resultado: string; p_nome_exibicao?: string | null };
+        Returns: Json;
+      };
+      cidadela_ranking_do_jogo: {
+        Args: { p_jogo_id: string; p_limite?: number };
+        Returns: Array<{
+          posicao: number;
+          nome_exibicao: string;
+          vitorias: number;
+          partidas: number;
+          melhor_sequencia: number;
+          sou_eu: boolean;
+        }>;
+      };
+      cidadela_meu_recorde_jogo: {
+        Args: { p_jogo_id: string };
+        Returns: Json;
+      };
       cidadela_gerar_missoes_diarias: {
         Args: Record<never, never>;
         Returns: Array<{

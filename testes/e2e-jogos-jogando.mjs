@@ -101,7 +101,17 @@ async function abrirJogo(label) {
     return true;
   }, label);
   await espera(2500);
-  return achou;
+  if (!achou) return false;
+
+  // O jogo agora abre no PAINEL DE CAMPANHA (fase, história, ranking). É
+  // preciso entrar na partida antes de jogar — sem isso o teste procurava
+  // casas de tabuleiro numa tela que ainda é o painel.
+  await page.evaluate(() => {
+    const b = document.querySelector(".jcamp-jogar");
+    if (b) b.click();
+  });
+  await espera(2500);
+  return true;
 }
 
 async function voltar() {

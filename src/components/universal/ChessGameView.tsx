@@ -9,9 +9,15 @@ import {
   lerTabuleiro,
 } from "@/lib/universal/estadoTabuleiro";
 import { MCTS } from "@/lib/ai/MCTS";
+import { useFimDeJogo } from "@/lib/universal/useFimDeJogo";
+import type { ResultadoPartida } from "@/lib/universal/campanhaJogos";
 
 interface ChessGameViewProps {
   onBack: () => void;
+  /** Força da IA da fase da campanha (ausente = partida avulsa). */
+  forca?: { maxIterations: number; timeBudgetMs: number } | undefined;
+  /** Avisa a campanha do resultado da partida (uma vez por partida). */
+  onFim?: ((resultado: ResultadoPartida) => void) | undefined;
 }
 
 /** Símbolo por dono + tipo de peça (a peça traz `data.pieceType`). */
@@ -30,7 +36,7 @@ const SIMBOLOS: Record<string, string> = {
   "1-pawn": "♟",
 };
 
-export function ChessGameView({ onBack }: ChessGameViewProps) {
+export function ChessGameView({ onBack, forca, onFim }: ChessGameViewProps) {
   const [gameState, setGameState] = useState<UniversalGameState | null>(() =>
     UniversalGameFactory.createGame("board_chess", 2),
   );
@@ -60,13 +66,16 @@ export function ChessGameView({ onBack }: ChessGameViewProps) {
       if (!engine || engine.isGameOver(estado)) return;
       setIaPensando(true);
       window.setTimeout(() => {
-        const mcts = new MCTS(engine, { maxIterations: 3000, timeBudgetMs: 1500 });
+        const mcts = new MCTS(
+          engine,
+          forca ?? { maxIterations: 3000, timeBudgetMs: 1500 },
+        );
         const escolha = mcts.computeMove(estado, 1);
         setGameState(escolha.move ? engine.applyMove(estado, escolha.move) : estado);
         setIaPensando(false);
       }, 300);
     },
-    [engine],
+    [engine, forca],
   );
 
   const clicar = (x: number, y: number) => {
@@ -92,6 +101,9 @@ export function ChessGameView({ onBack }: ChessGameViewProps) {
     setGameState(UniversalGameFactory.createGame("board_chess", 2));
     setSelecionada(null);
   };
+
+  // Reporta o fim à campanha (uma única vez).
+  useFimDeJogo(acabou, vencedor, onFim);
 
   const casaClara = (x: number, y: number) => (x + y) % 2 === 0;
 

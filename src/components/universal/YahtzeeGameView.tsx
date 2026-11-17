@@ -8,9 +8,15 @@ import {
   lerPlacarYahtzee,
   lerRolagensRestantes,
 } from "@/lib/universal/estadoTabuleiro";
+import { useFimDeJogo } from "@/lib/universal/useFimDeJogo";
+import type { ResultadoPartida } from "@/lib/universal/campanhaJogos";
 
 interface YahtzeeGameViewProps {
   onBack: () => void;
+  /** Força da IA da fase da campanha (ausente = partida avulsa). */
+  forca?: { maxIterations: number; timeBudgetMs: number } | undefined;
+  /** Avisa a campanha do resultado da partida (uma vez por partida). */
+  onFim?: ((resultado: ResultadoPartida) => void) | undefined;
 }
 
 const JOGO = "dice_yahtzee";
@@ -72,7 +78,7 @@ function Dado({
   );
 }
 
-export function YahtzeeGameView({ onBack }: YahtzeeGameViewProps) {
+export function YahtzeeGameView({ onBack, forca, onFim }: YahtzeeGameViewProps) {
   const [gameState, setGameState] = useState<UniversalGameState | null>(() =>
     UniversalGameFactory.createGame(JOGO, 2),
   );
@@ -85,6 +91,9 @@ export function YahtzeeGameView({ onBack }: YahtzeeGameViewProps) {
   const rolagensRestantes = useMemo(() => lerRolagensRestantes(gameState), [gameState]);
   const acabou = engine && gameState ? engine.isGameOver(gameState) : false;
   const vencedor = acabou && engine && gameState ? engine.getWinner(gameState) : null;
+
+  // Reporta o fim à campanha (uma única vez por partida).
+  useFimDeJogo(acabou, vencedor, onFim);
   const jogadorAtual = gameState?.currentPlayer ?? 0;
 
   const movimentos = useMemo(
@@ -112,23 +121,75 @@ export function YahtzeeGameView({ onBack }: YahtzeeGameViewProps) {
       window.setTimeout(() => {
         let atual = estado;
         // A IA joga o turno inteiro: rola até 3 vezes e então marca uma categoria.
-        for (let passo = 0; passo < 6; passo += 1) {
+        //
+        // Qualidade da decisão cresce com a fase da campanha:
+        //  • até 2 rolagens: guarda os dados que mais repetem (jogo simples);
+        //  • 3 rolagens: escolhe a categoria de MAIOR pontuação real (usa a
+        //    tabela do adapter, não uma cópia) e mantém os dados que servem
+        //    àquela categoria.
+        const rolagens = forca && forca.maxIterations >= 1500 ? 3 : 2;
+        let rolagensFeitas = 0;
+        const adapter = engine as unknown as {
+          calcularPontuacaoCategoria?: (d: number[], c: string) => number;
+        };
+
+        for (let passo = 0; passo < 12; passo += 1) {
           if (engine.isGameOver(atual) || atual.currentPlayer !== 1) break;
           const opcoes = engine.getValidMoves(atual);
           if (opcoes.length === 0) break;
+
           const rolagem = opcoes.find((m) => m.type === "roll");
           const marcar = opcoes.find((m) => m.type === "custom");
-          // Enquanto puder rolar, rola; na fase de pontuação, marca a 1ª livre.
-          const escolha: GameMove | undefined = rolagem ?? marcar;
-          if (!escolha) break;
-          atual = engine.applyMove(atual, escolha);
+
+          // Fase de pontuação: escolhe a categoria que mais pontua.
+          if (!rolagem || rolagensFeitas >= rolagens) {
+            const opcoesMarcar = opcoes.filter((m) => m.type === "custom");
+            if (opcoesMarcar.length === 0) break;
+            const dados = lerDadosYahtzee(atual);
+            let melhor = marcar;
+            let melhorPontos = -1;
+            if (adapter.calcularPontuacaoCategoria) {
+              for (const m of opcoesMarcar) {
+                const categoria = String(
+                  (m.data as Record<string, unknown> | undefined)?.["category"] ?? "",
+                );
+                const pontos = adapter.calcularPontuacaoCategoria(dados, categoria);
+                if (pontos > melhorPontos) {
+                  melhorPontos = pontos;
+                  melhor = m;
+                }
+              }
+            }
+            if (!melhor) break;
+            atual = engine.applyMove(atual, melhor);
+            rolagensFeitas = 0;
+            continue;
+          }
+
+          // Ainda pode rolar: mantém os dados que já formam maioria.
+          const dados = lerDadosYahtzee(atual);
+          const contagem = new Map<number, number>();
+          for (const d of dados) contagem.set(d, (contagem.get(d) ?? 0) + 1);
+          const maisComum = [...contagem.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+          const manter = dados
+            .map((d, i) => (d === maisComum ? i : -1))
+            .filter((i) => i >= 0);
+          const rolagemComMantidos =
+            opcoes.find(
+              (m) =>
+                m.type === "roll" &&
+                Array.isArray((m.data as Record<string, unknown> | undefined)?.["keep"]) &&
+                ((m.data as Record<string, unknown>)["keep"] as number[]).length === manter.length,
+            ) ?? rolagem;
+          atual = engine.applyMove(atual, rolagemComMantidos);
+          rolagensFeitas += 1;
         }
         setGameState(atual);
         setMantidos([]);
         setIaPensando(false);
       }, 600);
     },
-    [engine],
+    [engine, forca],
   );
 
   const aplicar = useCallback(

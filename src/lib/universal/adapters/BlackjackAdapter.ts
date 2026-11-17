@@ -117,6 +117,16 @@ export class BlackjackAdapter implements UniversalGameEngine {
   }
 
   /**
+   * Valor da mão tratando Ás como 11 (mão "soft"). Usado para aplicar a regra
+   * real de cassino: o dealer bate em 17 soft.
+   */
+  private valorSoft(hand: GamePiece[]): number {
+    let value = 0;
+    for (const card of hand) value += card.data["value"];
+    return value;
+  }
+
+  /**
    * Retorna jogadas legais.
    */
   getValidMoves(state: UniversalGameState): GameMove[] {
@@ -228,12 +238,27 @@ export class BlackjackAdapter implements UniversalGameEngine {
    * Dealer joga até 17 ou mais.
    */
   private playDealer(state: UniversalGameState): void {
-    while (this.calculateHandValue(state.customState["dealerHand"]) < 17) {
-      const card = state.customState["deck"].pop();
-      if (card) {
-        card.data["faceUp"] = true;
-        state.customState["dealerHand"].push(card);
+    // Regra do dealer: "stand on soft 17" (padrão) ou "hit on soft 17" (mesa
+    // profissional). A segunda é regra REAL de cassino, mais dura para o
+    // jogador — usada nas fases altas da campanha. Não é truque: é a mesma
+    // mesa que existe em Las Vegas.
+    const bateSoft17 =
+      (state.activeRules ?? []).includes("dealer_hit_soft_17") === true;
+
+    for (;;) {
+      const duro = this.calculateHandValue(state.customState["dealerHand"]);
+      if (duro > 17) break;
+      if (duro < 17) {
+        // continua comprando
+      } else if (duro === 17) {
+        // 17: só compra se for soft e a regra exigir
+        const soft = this.valorSoft(state.customState["dealerHand"]);
+        if (!(bateSoft17 && soft === 17)) break;
       }
+      const card = state.customState["deck"].pop();
+      if (!card) break;
+      card.data["faceUp"] = true;
+      state.customState["dealerHand"].push(card);
     }
 
     // Determina vencedores

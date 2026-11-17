@@ -109,7 +109,15 @@ export class YahtzeeAdapter implements UniversalGameEngine {
 
   /**
    * Calcula pontuação de uma categoria.
+   *
+   * Público porque a IA da fase da campanha precisa comparar categorias para
+   * escolher a melhor — duplicar a tabela de pontuação no componente seria
+   * uma segunda fonte de verdade das regras.
    */
+  calcularPontuacaoCategoria(dice: number[], category: string): number {
+    return this.calculateCategoryScore(dice, category);
+  }
+
   private calculateCategoryScore(dice: number[], category: string): number {
     const counts = this.countDice(dice);
 

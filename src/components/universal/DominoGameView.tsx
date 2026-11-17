@@ -4,9 +4,15 @@ import { UniversalGameFactory } from "@/lib/universal/UniversalGameFactory";
 import type { GameMove, GamePiece, UniversalGameState } from "@/lib/universal/UniversalGameEngine";
 import { lerMesaDomino, lerPontasDomino } from "@/lib/universal/estadoTabuleiro";
 import { MCTS } from "@/lib/ai/MCTS";
+import { useFimDeJogo } from "@/lib/universal/useFimDeJogo";
+import type { ResultadoPartida } from "@/lib/universal/campanhaJogos";
 
 interface DominoGameViewProps {
   onBack: () => void;
+  /** Força da IA da fase da campanha (ausente = partida avulsa). */
+  forca?: { maxIterations: number; timeBudgetMs: number } | undefined;
+  /** Avisa a campanha do resultado da partida (uma vez por partida). */
+  onFim?: ((resultado: ResultadoPartida) => void) | undefined;
 }
 
 /** Id registrado no factory. O antigo `tile_domino` não existe. */
@@ -43,7 +49,7 @@ function Pontos({ n }: { n: number }) {
   );
 }
 
-export function DominoGameView({ onBack }: DominoGameViewProps) {
+export function DominoGameView({ onBack, forca, onFim }: DominoGameViewProps) {
   const [gameState, setGameState] = useState<UniversalGameState | null>(() =>
     UniversalGameFactory.createGame(JOGO, 2),
   );
@@ -58,6 +64,9 @@ export function DominoGameView({ onBack }: DominoGameViewProps) {
   );
   const acabou = engine && gameState ? engine.isGameOver(gameState) : false;
   const vencedor = acabou && engine && gameState ? engine.getWinner(gameState) : null;
+
+  // Reporta o fim à campanha (uma única vez por partida).
+  useFimDeJogo(acabou, vencedor, onFim);
 
   // Mãos e pontas vivem no estado real, não em `hands`/`board` do topo.
   const minhaMao = gameState?.players?.[0]?.hand ?? [];
@@ -83,14 +92,17 @@ export function DominoGameView({ onBack }: DominoGameViewProps) {
           setIaPensando(false);
           return;
         }
-        const mcts = new MCTS(engine, { maxIterations: 2000, timeBudgetMs: 1000 });
+        const mcts = new MCTS(
+          engine,
+          forca ?? { maxIterations: 2000, timeBudgetMs: 1000 },
+        );
         const escolha = mcts.computeMove(estado, 1);
         const jogada = escolha.move ?? opcoes[0] ?? null;
         setGameState(jogada ? engine.applyMove(estado, jogada) : estado);
         setIaPensando(false);
       }, 500);
     },
-    [engine],
+    [engine, forca],
   );
 
   /** Aplica um movimento e devolve a vez à IA. */

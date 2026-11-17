@@ -1,6 +1,8 @@
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { ArrowLeft, Trophy, Target, BookOpen, X, Award, Users, Gamepad2 } from "lucide-react";
 import { marcarRitualPendente } from "@/components/botao/career/trilhaIntegracao";
+import { registrarEventoMissao } from "@/lib/cidadela/pracinhaCore";
+import { supabase } from "@/integrations/supabase/client";
 import { HQPanel } from "./HQPanel";
 import { TrilhaBoard } from "./TrilhaBoard";
 import { GameEndAdModal } from "./GameEndAdModal";
@@ -260,6 +262,16 @@ function TrilhaGameBoard({
         setGameResult(result);
         setShowAdModal(true);
       }
+      // Missão diária + ranking do jogo. A Trilha tem campanha própria (fases
+      // e troféus), então aqui só alimentamos o diário e o placar público.
+      void registrarEventoMissao("trilha_online" as never).catch(() => null);
+      void Promise.resolve(
+        supabase.rpc("cidadela_registrar_resultado_jogo", {
+          p_jogo_id: "trilha",
+          p_resultado: result,
+          p_nome_exibicao: null,
+        }),
+      ).catch(() => undefined);
       setGameEnded(true);
     }
     if (game.state.phase !== "over") {

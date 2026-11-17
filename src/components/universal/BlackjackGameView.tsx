@@ -1,6 +1,7 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BackButton } from "@/components/BackButton";
 import { UniversalGameFactory } from "@/lib/universal/UniversalGameFactory";
+import type { ResultadoPartida } from "@/lib/universal/campanhaJogos";
 import type { GameMove, UniversalGameState } from "@/lib/universal/UniversalGameEngine";
 import {
   cartaVermelha,
@@ -12,6 +13,10 @@ import {
 
 interface BlackjackGameViewProps {
   onBack: () => void;
+  /** Força da IA da fase da campanha (ausente = partida avulsa). */
+  forca?: { maxIterations: number; timeBudgetMs: number } | undefined;
+  /** Avisa a campanha do resultado da partida (uma vez por partida). */
+  onFim?: ((resultado: ResultadoPartida) => void) | undefined;
 }
 
 const JOGO = "card_blackjack";
@@ -36,10 +41,16 @@ function Carta({ texto, vermelha }: { texto: string; vermelha: boolean }) {
   );
 }
 
-export function BlackjackGameView({ onBack }: BlackjackGameViewProps) {
-  const [gameState, setGameState] = useState<UniversalGameState | null>(() =>
-    UniversalGameFactory.createGame(JOGO, JOGADORES),
-  );
+export function BlackjackGameView({ onBack, forca, onFim }: BlackjackGameViewProps) {
+  // Nas fases altas a mesa aplica a regra profissional "dealer hits soft 17" —
+  // regra real de cassino, que aumenta a vantagem da casa. A fase inicial usa
+  // a mesa amadora (stand on soft 17).
+  const regraDura = forca !== undefined && forca.maxIterations >= 1500;
+  const [gameState, setGameState] = useState<UniversalGameState | null>(() => {
+    const inicial = UniversalGameFactory.createGame(JOGO, JOGADORES);
+    if (inicial && regraDura) inicial.activeRules = [...inicial.activeRules, "dealer_hit_soft_17"];
+    return inicial;
+  });
 
   const engine = useMemo(() => UniversalGameFactory.createEngine(JOGO), []);
 
@@ -87,12 +98,49 @@ export function BlackjackGameView({ onBack }: BlackjackGameViewProps) {
   };
 
   const novaPartida = () => {
-    setGameState(UniversalGameFactory.createGame(JOGO, JOGADORES));
+    const inicial = UniversalGameFactory.createGame(JOGO, JOGADORES);
+    if (inicial && regraDura) inicial.activeRules = [...inicial.activeRules, "dealer_hit_soft_17"];
+    setGameState(inicial);
   };
+
+  /**
+   * O Blackjack é uma SESSÃO, não uma partida única: o jogador aposta e joga
+   * várias mãos seguidas. Por isso a campanha não julga cada mão — ela vê o
+   * resultado LÍQUIDO da sessão, reportado quando o jogador sai da mesa (ou
+   * quando a banca quebra, que é o fim natural da sessão).
+   */
+  const [saldoSessao, setSaldoSessao] = useState(0);
+  const maoSomadaRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const id = gameState?.gameId ?? null;
+    if (!acabou || !id || resultado === undefined) return;
+    if (maoSomadaRef.current === id) return;
+    maoSomadaRef.current = id;
+    setSaldoSessao((s) => s + resultado);
+  }, [acabou, resultado, gameState?.gameId]);
+
+  const encerrarSessao = useCallback(() => {
+    if (!onFim) return;
+    if (saldoSessao > 0) onFim("vitoria");
+    else if (saldoSessao < 0) onFim("derrota");
+    else onFim("empate");
+  }, [onFim, saldoSessao]);
+
+  // Sair da mesa = fechar a sessão. Com campanha, o resultado vai para a tela
+  // de fim de partida (é lá que a recompensa é paga); sem campanha, sai direto.
+  const sairDaMesa = useCallback(() => {
+    if (onFim) {
+      encerrarSessao();
+      return;
+    }
+    onBack();
+  }, [encerrarSessao, onFim, onBack]);
 
   const apostas = movimentos
     .filter((m) => m.type === "bet")
     .map((m) => Number(m.data?.["amount"] ?? 0));
+
 
   const mensagemFinal =
     resultado === undefined
@@ -105,7 +153,7 @@ export function BlackjackGameView({ onBack }: BlackjackGameViewProps) {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-emerald-950 to-slate-900 p-4">
-      <BackButton onClick={onBack} />
+      <BackButton onClick={sairDaMesa} />
       <div className="mx-auto max-w-3xl">
         <h1 className="mb-6 text-center text-3xl font-bold text-white">Blackjack</h1>
 
