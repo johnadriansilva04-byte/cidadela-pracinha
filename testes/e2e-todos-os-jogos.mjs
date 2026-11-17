@@ -148,7 +148,13 @@ try {
     // ("cidadela:jogo-ativo:v1") e o RESTAURA no reload — limpar a chave é o
     // que devolve o hub de verdade.
     await page.evaluate(() => {
-      window.sessionStorage.removeItem("cidadela:jogo-ativo:v1");
+      // O acesso é protegido: em about:blank (fim de uma partida que navegou)
+      // ler sessionStorage lança SecurityError.
+      try {
+        window.sessionStorage.removeItem("cidadela:jogo-ativo:v1");
+      } catch {
+        /* origem sem storage acessível — nada a limpar */
+      }
     });
     await page.goto(`${BASE}/cidadela`, { waitUntil: "networkidle2" });
     await espera(3000);
@@ -173,11 +179,16 @@ try {
     const antes = errosGlobais.length;
 
     const abriu = await page.evaluate((label) => {
-      // Casar pelo título do card (h3) para não confundir com outros botões
-      // que só MENCIONAM o nome (ex.: "Técnico de Futebol" no portão).
-      const card = [...document.querySelectorAll("button")].find(
-        (x) => x.querySelector("h3")?.textContent.trim() === label,
-      );
+      // Casar pelo nome acessível do card (aria-label = "Nome — descrição").
+      // O card é um <button> de verdade, então o clique por teclado/ponteiro
+      // funciona igual; casar pelo aria-label evita confundir com outros
+      // botões que só MENCIONAM o nome (ex.: "Técnico de Futebol" no portão).
+      const cards = [...document.querySelectorAll("button")];
+      const card =
+        cards.find((x) => (x.getAttribute("aria-label") || "").startsWith(label + " —")) ??
+        cards.find((x) => (x.getAttribute("aria-label") || "").startsWith(label + " -")) ??
+        cards.find((x) => x.querySelector("h3")?.textContent.trim() === label) ??
+        cards.find((x) => x.querySelector("h2")?.textContent.trim() === label);
       if (!card) return false;
       card.click();
       return true;

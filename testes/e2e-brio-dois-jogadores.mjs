@@ -8,10 +8,12 @@
  * Fluxo: A cria a sala de convite → B entra pelo link → os dois jogam as
  * MESMAS rodadas → os dois veem o MESMO resultado final.
  *
- * ATENÇÃO AO CRONÔMETRO: a rodada dura 7 SEGUNDOS (o servidor é a
- * autoridade). O teste NÃO pode esperar mais que isso entre olhar a tela e
- * responder, senão a rodada fecha sozinha e as alternativas somem. Por isso
- * o laço abaixo age assim que encontra as opções, com passos curtos.
+ * ATENÇÃO AO CRONÔMETRO: a rodada dura 15 SEGUNDOS de resposta (o servidor é
+ * a autoridade) e o servidor ainda concede uma JANELA DE LEITURA depois da
+ * revelação. O teste NÃO pode esperar mais que isso entre olhar a tela e
+ * responder, senão a rodada fecha sozinha e as alternativas somem. Por isso o
+ * laço abaixo age assim que encontra as opções, com passos curtos — e o
+ * orçamento de passos é folgado para caber o duelo inteiro.
  *
  * Uso: node testes/e2e-brio-dois-jogadores.mjs [porta]
  */
@@ -231,7 +233,7 @@ try {
   let rodadasJogadas = 0;
   let viuEsperaA = false;
 
-  for (let passo = 0; passo < 900; passo += 1) {
+  for (let passo = 0; passo < 2400; passo += 1) {
     const [eA, eB] = await Promise.all([estado(pageA), estado(pageB)]);
     if (eA === "resultado" && eB === "resultado") break;
 

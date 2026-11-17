@@ -101,7 +101,19 @@ async function main() {
 
     const textoHub = await page.evaluate(() => document.body.innerText);
     checar(/Guerra de Brio/i.test(textoHub), "card 'Guerra de Brio' aparece na Cidadela");
-    checar(/Duelo de conhecimento/i.test(textoHub), "card tem a descrição do duelo");
+    // O card novo mostra a CHAMADA ("Duelo 1v1 de conhecimento com TRI") no
+    // lugar da descrição curta — que segue no aria-label, para leitores de tela.
+    checar(/conhecimento/i.test(textoHub), "card explica que o duelo é de conhecimento");
+    const rotuloBrio = await page.evaluate(() => {
+      const b = [...document.querySelectorAll("button")].find((x) =>
+        (x.getAttribute("aria-label") || "").startsWith("Guerra de Brio —"),
+      );
+      return b ? b.getAttribute("aria-label") : null;
+    });
+    checar(
+      Boolean(rotuloBrio && /Duelo de conhecimento/i.test(rotuloBrio)),
+      `o nome acessível do card descreve o jogo (${rotuloBrio})`,
+    );
 
     console.log("\n=== 2. Abrir o jogo e ver o lobby ===");
     await clicarPorTexto(page, /Guerra de Brio/i);

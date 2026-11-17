@@ -40,6 +40,7 @@ import { CheckersGameView } from "@/components/universal/CheckersGameView";
 import { BlackjackGameView } from "@/components/universal/BlackjackGameView";
 import { DominoGameView } from "@/components/universal/DominoGameView";
 import { YahtzeeGameView } from "@/components/universal/YahtzeeGameView";
+import { GradeJogos } from "@/components/cidadela/GradeJogos";
 
 export const Route = createFileRoute("/cidadela")({
   head: () => ({
@@ -91,6 +92,11 @@ const GAMES = [
     description: "Estádio do Campus",
     icon: Trophy,
     status: "disponível",
+    cor: "#22d3ee",
+    cor2: "#0ea5e9",
+    genero: "Esporte",
+    chamada: "Domine o estadio e suba de divisao",
+    selo: "LENDARIO",
   },
   {
     id: "trilha" as Game,
@@ -98,6 +104,11 @@ const GAMES = [
     description: "Estratégia",
     icon: Target,
     status: "disponível",
+    cor: "#a3e635",
+    cor2: "#22c55e",
+    genero: "Estrategia",
+    chamada: "Cerque, alinhe tres e aniquile",
+    selo: "CLASSICO",
   },
   {
     id: "xadrez" as Game,
@@ -105,6 +116,11 @@ const GAMES = [
     description: "Tática clássica",
     icon: Crown,
     status: "disponível",
+    cor: "#f472b6",
+    cor2: "#a855f7",
+    genero: "Tatica",
+    chamada: "Xeque-mate em 64 casas",
+    selo: "MESTRE",
   },
   {
     id: "carbrawl" as Game,
@@ -112,6 +128,11 @@ const GAMES = [
     description: "Sumo de carros",
     icon: Trophy,
     status: "disponível",
+    cor: "#fb923c",
+    cor2: "#ef4444",
+    genero: "Acao",
+    chamada: "Sumo de carros: empurre e sobreviva",
+    selo: "CAOS",
   },
   {
     id: "dama" as Game,
@@ -119,6 +140,10 @@ const GAMES = [
     description: "Capturas",
     icon: Grid3X3,
     status: "disponível",
+    cor: "#f87171",
+    cor2: "#dc2626",
+    genero: "Capturas",
+    chamada: "Coma tudo e coroe a dama",
   },
   {
     id: "blackjack" as Game,
@@ -126,6 +151,10 @@ const GAMES = [
     description: "21 pontos",
     icon: IdCard,
     status: "disponível",
+    cor: "#34d399",
+    cor2: "#059669",
+    genero: "Cartas",
+    chamada: "Chegue a 21 sem estourar",
   },
   {
     id: "domino" as Game,
@@ -133,6 +162,10 @@ const GAMES = [
     description: "Encaixe",
     icon: Grid3X3,
     status: "disponível",
+    cor: "#60a5fa",
+    cor2: "#3b82f6",
+    genero: "Encaixe",
+    chamada: "Feche as pontas e bata primeiro",
   },
   {
     id: "yahtzee" as Game,
@@ -140,6 +173,10 @@ const GAMES = [
     description: "Dados e sorte",
     icon: Target,
     status: "disponível",
+    cor: "#fbbf24",
+    cor2: "#f59e0b",
+    genero: "Dados",
+    chamada: "Cinco dados, treze jogadas, uma cartela",
   },
   {
     id: "brio" as Game,
@@ -147,6 +184,11 @@ const GAMES = [
     description: "Duelo de conhecimento",
     icon: Brain,
     status: "disponível",
+    cor: "#c084fc",
+    cor2: "#6366f1",
+    genero: "Conhecimento",
+    chamada: "Duelo 1v1 de conhecimento com TRI",
+    selo: "1v1",
   },
 ];
 
@@ -536,9 +578,6 @@ function CidadelaCompView() {
             <h1 className="texto-marca text-4xl font-black tracking-tight md:text-5xl">
               Cidadela dos Clássicos
             </h1>
-            <p className="mt-2 text-sm font-medium text-muted-foreground md:text-base">
-              Jogos do Campus
-            </p>
             {perfilCidadela?.profissao_atual && (
               <div className="mt-3">
                 <button
@@ -556,34 +595,21 @@ function CidadelaCompView() {
           {/* Acontecimentos/notificações chegam ao celular (§1) — Cidadela limpa. */}
 
           <div className="mb-6">
-            <div className="grid gap-3 sm:grid-cols-2">
-              {GAMES.map((game) => {
-                const Icon = game.icon;
-                const isAvailable = game.status === "disponível";
-                return (
-                  <button
-                    key={game.id}
-                    onClick={() => isAvailable && handleGameSelect(game.id)}
-                    disabled={!isAvailable}
-                    className={`flex items-center gap-3 p-4 rounded-xl border-2 transition-all duration-200 w-full text-left ${
-                      isAvailable
-                        ? "border-white/10 bg-gradient-to-r from-white/5 to-white/[0.02] hover:border-primary/50 hover:bg-primary/10 hover:shadow-lg hover:shadow-primary/10 cursor-pointer active:scale-[0.98] hover:-translate-y-0.5"
-                        : "border-white/5 bg-white/[0.02] opacity-50 cursor-not-allowed grayscale"
-                    }`}
-                  >
-                    <div
-                      className={`p-2 rounded-lg ${isAvailable ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"}`}
-                    >
-                      <Icon className="h-5 w-5" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-foreground text-sm">{game.label}</h3>
-                      <p className="text-xs text-muted-foreground">{game.description}</p>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+            <GradeJogos
+              jogos={GAMES.map((game) => ({
+                id: game.id as string,
+                label: game.label,
+                description: game.description,
+                icon: game.icon,
+                status: game.status,
+                cor: game.cor,
+                cor2: game.cor2,
+                genero: game.genero,
+                chamada: game.chamada,
+                selo: game.selo,
+              }))}
+              onSelecionar={(id) => handleGameSelect(id as Game)}
+            />
           </div>
         </main>
 

@@ -109,7 +109,10 @@ export function ArenaBrio({
 
     const tick = () => {
       const decorrido = Number.isNaN(inicio) ? 0 : Date.now() - inicio;
-      const resta = Math.max(0, limite - decorrido);
+      // O servidor libera a rodada com uma JANELA DE LEITURA (carimbo no
+      // futuro): enquanto ela corre, `decorrido` é negativo. Sem o teto, a
+      // tela mostraria mais de `segundosPorPergunta` segundos.
+      const resta = Math.max(0, Math.min(limite, limite - decorrido));
       setRestanteMs(resta);
       // O tempo acabou e o servidor ainda não revelou: pede o fechamento.
       if (resta <= 0 && !rodada.revelada) fechar();

@@ -14,6 +14,9 @@ import { apurarRodada, chanceAcertoBot, letraErrada, vencedorDoPlacar } from "./
 import { rngDe, selecionarPerguntas, type PerguntaBruta } from "./selecao";
 import { DUELO, LETRAS, type Letra, type PerguntaPublica } from "./types";
 
+/** Janela de leitura: o relógio só corre depois que a pergunta aparece. */
+export const JANELA_LEITURA_MS = 6000;
+
 /** Rodada do motor local (mesma forma da versão servidor). */
 export interface RodadaLocal {
   numero: number;
@@ -133,7 +136,7 @@ export function criarPartidaLocal(opcoes: {
     desempate: false,
     vencedor_id: null,
     empate: false,
-    rodada_liberada_em: Date.now(),
+    rodada_liberada_em: Date.now() + JANELA_LEITURA_MS,
     rodadas,
     respostas: [],
     bot_id: botNivel != null ? `${opcoes.userId}${BOT_SUFIXO}` : null,
@@ -189,7 +192,7 @@ export function responderLocal(p: PartidaLocal, letra: Letra, tempoMs: number): 
       rodada: rodada.numero,
       jogador_id: p.jogador_1_id,
       letra,
-      tempo_ms: Math.min(tempoMs, p.segundos_por_pergunta * 1000),
+      tempo_ms: Math.max(0, Math.min(tempoMs, p.segundos_por_pergunta * 1000)),
       acertou: null,
       pontos: 0,
     },
@@ -299,16 +302,16 @@ export function fecharRodadaLocal(p: PartidaLocal, tempoDecorridoMs: number): Pa
       rodada_atual: p.rodada_atual + 1,
       total_perguntas: p.total_perguntas + 1,
       rodadas: [...rodadas, extra],
-      rodada_liberada_em: Date.now(),
+      rodada_liberada_em: Date.now() + JANELA_LEITURA_MS,
     };
   }
 
   if (estourou) {
     // Sem mais rodadas? (defensivo — o fluxo normal avança normalmente.)
-    return { ...base, rodada_atual: p.rodada_atual + 1, rodada_liberada_em: Date.now() };
+    return { ...base, rodada_atual: p.rodada_atual + 1, rodada_liberada_em: Date.now() + JANELA_LEITURA_MS };
   }
 
-  return { ...base, rodada_atual: p.rodada_atual + 1, rodada_liberada_em: Date.now() };
+  return { ...base, rodada_atual: p.rodada_atual + 1, rodada_liberada_em: Date.now() + JANELA_LEITURA_MS };
 }
 
 /** Sorteia uma pergunta inédita para a morte súbita. */
@@ -360,7 +363,7 @@ export function resolverDesempateLocal(p: PartidaLocal): PartidaLocal {
     rodadas: [...p.rodadas, extra],
     rodada_atual: p.rodada_atual + 1,
     total_perguntas: p.total_perguntas + 1,
-    rodada_liberada_em: Date.now(),
+    rodada_liberada_em: Date.now() + JANELA_LEITURA_MS,
   };
 }
 

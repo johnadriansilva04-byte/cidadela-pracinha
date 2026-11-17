@@ -2702,3 +2702,283 @@ button.celular-card:hover {
   font-size: 0.78rem;
   color: var(--brio-fg);
 }
+
+/* ==========================================================================
+   GRADE DE JOGOS DA CIDADELA — visual de fliperama
+   Cada card tem acento neon próprio (--cg-cor) com halo, elevação e brilho
+   que varre o card no hover. Tudo em CSS: nada de imagem ou JS por frame.
+   ========================================================================== */
+.cg-grade {
+  width: 100%;
+}
+
+.cg-grade-topo {
+  margin-bottom: 1rem;
+}
+
+.cg-grade-titulo {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--foreground);
+  text-transform: uppercase;
+}
+
+/* Ponto pulsante: dá o ar de "máquina ligada". */
+.cg-grade-pulso {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 999px;
+  background: var(--primary);
+  box-shadow: 0 0 12px var(--primary);
+  animation: cg-pulso 1.6s ease-in-out infinite;
+}
+
+@keyframes cg-pulso {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.8); }
+}
+
+.cg-grade-sub {
+  margin-top: 0.25rem;
+  font-size: 0.78rem;
+  color: var(--muted-foreground);
+}
+
+.cg-grade-grid {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+}
+
+/* ---------- Card ---------- */
+.cg-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  overflow: hidden;
+  padding: 1rem;
+  border-radius: 1rem;
+  border: 1px solid color-mix(in oklab, var(--cg-cor) 35%, transparent);
+  /* Fundo escuro + tinta do acento: o card parece iluminado por dentro. */
+  background:
+    linear-gradient(
+      160deg,
+      color-mix(in oklab, var(--cg-cor) 22%, transparent) 0%,
+      color-mix(in oklab, var(--cg-cor2) 8%, transparent) 45%,
+      oklch(0.18 0.03 285 / 0.9) 100%
+    );
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.22s ease,
+    border-color 0.22s ease;
+  box-shadow:
+    0 1px 0 color-mix(in oklab, var(--cg-cor) 25%, transparent) inset,
+    0 6px 18px oklch(0 0 0 / 0.35);
+  animation: cg-entrada 0.5s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: var(--cg-atraso, 0ms);
+}
+
+@keyframes cg-entrada {
+  from { opacity: 0; transform: translateY(12px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+
+.cg-card:hover:not(:disabled),
+.cg-card:focus-visible:not(:disabled) {
+  transform: translateY(-4px) scale(1.02);
+  border-color: color-mix(in oklab, var(--cg-cor) 75%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--cg-cor) 45%, transparent),
+    0 0 24px color-mix(in oklab, var(--cg-cor) 40%, transparent),
+    0 14px 30px oklch(0 0 0 / 0.45);
+}
+
+.cg-card:focus-visible {
+  outline: 2px solid var(--cg-cor);
+  outline-offset: 2px;
+}
+
+.cg-card:active:not(:disabled) {
+  transform: translateY(-1px) scale(0.99);
+}
+
+.cg-card:disabled {
+  cursor: not-allowed;
+  filter: grayscale(1);
+  opacity: 0.45;
+}
+
+/* Halo radial no canto superior — a "luz da arena". */
+.cg-card-brilho {
+  position: absolute;
+  inset: -40% 40% 55% -25%;
+  border-radius: 999px;
+  background: radial-gradient(
+    circle at 30% 30%,
+    color-mix(in oklab, var(--cg-cor) 55%, transparent),
+    transparent 70%
+  );
+  opacity: 0.55;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+.cg-card:hover .cg-card-brilho,
+.cg-card:focus-visible .cg-card-brilho {
+  opacity: 0.95;
+}
+
+/* Faixa de luz que varre o card no hover. */
+.cg-card-borda {
+  position: absolute;
+  top: 0;
+  left: -60%;
+  width: 45%;
+  height: 100%;
+  background: linear-gradient(
+    100deg,
+    transparent,
+    color-mix(in oklab, var(--cg-cor) 30%, transparent),
+    transparent
+  );
+  transform: skewX(-18deg);
+  pointer-events: none;
+  transition: left 0.5s ease;
+}
+
+.cg-card:hover .cg-card-borda,
+.cg-card:focus-visible .cg-card-borda {
+  left: 115%;
+}
+
+/* ---------- Conteúdo ---------- */
+.cg-card-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  position: relative;
+  z-index: 1;
+}
+
+.cg-card-icone {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.75rem;
+  border: 1px solid color-mix(in oklab, var(--cg-cor) 45%, transparent);
+  background: color-mix(in oklab, var(--cg-cor) 20%, oklch(0.2 0.03 285));
+  color: color-mix(in oklab, var(--cg-cor) 85%, white);
+  box-shadow: 0 0 14px color-mix(in oklab, var(--cg-cor) 30%, transparent);
+}
+
+.cg-card-icone svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.cg-selo {
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: oklch(0.15 0.02 285);
+  background: linear-gradient(90deg, var(--cg-cor), var(--cg-cor2));
+  box-shadow: 0 0 12px color-mix(in oklab, var(--cg-cor) 55%, transparent);
+}
+
+.cg-card-nome {
+  position: relative;
+  z-index: 1;
+  margin-top: 0.35rem;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--foreground);
+}
+
+.cg-card-chamada {
+  position: relative;
+  z-index: 1;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: color-mix(in oklab, var(--cg-cor) 30%, var(--muted-foreground));
+}
+
+.cg-card-rodape {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid color-mix(in oklab, var(--cg-cor) 20%, transparent);
+}
+
+.cg-genero {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+.cg-jogar {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: color-mix(in oklab, var(--cg-cor) 80%, white);
+}
+
+.cg-seta {
+  display: inline-block;
+  font-size: 1rem;
+  line-height: 1;
+  transition: transform 0.2s ease;
+}
+
+.cg-card:hover .cg-seta,
+.cg-card:focus-visible .cg-seta {
+  transform: translateX(4px);
+}
+
+@media (max-width: 480px) {
+  .cg-grade-grid {
+    grid-template-columns: 1fr;
+  }
+  .cg-card {
+    padding: 0.9rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cg-card,
+  .cg-card-brilho,
+  .cg-card-borda,
+  .cg-seta,
+  .cg-grade-pulso {
+    animation: none !important;
+    transition: none !important;
+  }
+  .cg-card:hover:not(:disabled) {
+    transform: none;
+  }
+}

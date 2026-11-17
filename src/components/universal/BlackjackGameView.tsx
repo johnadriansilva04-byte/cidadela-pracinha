@@ -1,213 +1,222 @@
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { BackButton } from "@/components/BackButton";
 import { UniversalGameFactory } from "@/lib/universal/UniversalGameFactory";
+import type { GameMove, UniversalGameState } from "@/lib/universal/UniversalGameEngine";
+import {
+  cartaVermelha,
+  lerMao,
+  lerMaoDealer,
+  simboloDaCarta,
+  valorDaMao,
+} from "@/lib/universal/estadoTabuleiro";
 
 interface BlackjackGameViewProps {
   onBack: () => void;
 }
 
-const SUIT_SYMBOLS: Record<string, string> = {
-  hearts: "♥",
-  diamonds: "♦",
-  clubs: "♣",
-  spades: "♠",
-};
+const JOGO = "card_blackjack";
 
-const SUIT_COLORS: Record<string, string> = {
-  hearts: "text-red-600",
-  diamonds: "text-red-600",
-  clubs: "text-slate-900",
-  spades: "text-slate-900",
-};
+/**
+ * UM jogador: contra o dealer. Com dois assentos o adversário virtual nunca
+ * aposta e a partida ficaria presa na fase de apostas (o engine não faz a IA
+ * apostar) — por isso o duelo aqui é contra a casa.
+ */
+const JOGADORES = 1;
 
-const RANK_LABELS: Record<string, string> = {
-  ace: "A",
-  king: "K",
-  queen: "Q",
-  jack: "J",
-  "10": "10",
-  "9": "9",
-  "8": "8",
-  "7": "7",
-  "6": "6",
-  "5": "5",
-  "4": "4",
-  "3": "3",
-  "2": "2",
-};
-
-function CardDisplay({ card, hidden = false }: { card: any; hidden?: boolean }) {
-  if (hidden) {
-    return (
-      <div className="h-32 w-24 rounded-lg bg-gradient-to-br from-blue-600 to-blue-800 shadow-lg border-2 border-blue-400 flex items-center justify-center">
-        <div className="text-3xl text-white font-bold">?</div>
-      </div>
-    );
-  }
-
+function Carta({ texto, vermelha }: { texto: string; vermelha: boolean }) {
   return (
-    <div className="h-32 w-24 rounded-lg bg-white shadow-lg border-2 border-slate-300 flex flex-col items-center justify-center">
-      <div className={`text-3xl font-bold ${SUIT_COLORS[card.suit]}`}>
-        {RANK_LABELS[card.rank]}
-      </div>
-      <div className={`text-4xl ${SUIT_COLORS[card.suit]}`}>
-        {SUIT_SYMBOLS[card.suit]}
-      </div>
+    <div
+      className={[
+        "flex h-24 w-16 flex-col items-center justify-center rounded-lg border-2 border-slate-300 bg-white shadow-lg",
+        vermelha ? "text-red-600" : "text-slate-900",
+      ].join(" ")}
+    >
+      <span className="text-2xl font-bold">{texto}</span>
     </div>
   );
 }
 
-function calculateHandValue(cards: any[]) {
-  let value = 0;
-  let aces = 0;
-
-  for (const card of cards) {
-    if (card.rank === "ace") {
-      aces += 1;
-      value += 11;
-    } else if (["king", "queen", "jack"].includes(card.rank)) {
-      value += 10;
-    } else {
-      value += parseInt(card.rank, 10);
-    }
-  }
-
-  while (value > 21 && aces > 0) {
-    value -= 10;
-    aces -= 1;
-  }
-
-  return value;
-}
-
 export function BlackjackGameView({ onBack }: BlackjackGameViewProps) {
-  const [gameState, setGameState] = useState(() =>
-    UniversalGameFactory.createGame("card_blackjack", 2)
+  const [gameState, setGameState] = useState<UniversalGameState | null>(() =>
+    UniversalGameFactory.createGame(JOGO, JOGADORES),
   );
-  const [isGameOver, setIsGameOver] = useState(false);
 
-  const engine = UniversalGameFactory.createEngine("card_blackjack");
-  const validMoves = engine.getValidMoves(gameState);
+  const engine = useMemo(() => UniversalGameFactory.createEngine(JOGO), []);
 
-  const playerHand = gameState.hands?.[0] || [];
-  const dealerHand = gameState.hands?.[1] || [];
-  const playerValue = calculateHandValue(playerHand);
-  const dealerValue = calculateHandValue(dealerHand);
+  const movimentos = useMemo(
+    () => (engine && gameState ? engine.getValidMoves(gameState) : []),
+    [engine, gameState],
+  );
+  const acabou = engine && gameState ? engine.isGameOver(gameState) : false;
+  const fase = gameState?.phase ?? "betting";
 
-  const handleHit = () => {
-    const hitMove = validMoves.find((m: any) => m.action === "hit");
-    if (hitMove) {
-      const newState = engine.applyMove(gameState, hitMove);
-      setGameState(newState);
+  // Mãos: do jogador em `players[].hand`; do dealer em `customState.dealerHand`.
+  const minhaMao = useMemo(() => lerMao(gameState, 0), [gameState]);
+  const maoDealer = useMemo(() => lerMaoDealer(gameState), [gameState]);
+  const meuValor = useMemo(() => valorDaMao(minhaMao), [minhaMao]);
+  const valorDealer = useMemo(() => valorDaMao(maoDealer), [maoDealer]);
 
-      const newPlayerHand = newState.hands?.[0] || [];
-      const newPlayerValue = calculateHandValue(newPlayerHand);
+  const recursos = (gameState?.resources?.[0] ?? {}) as { chips?: number; currentBet?: number };
+  const fichas = recursos.chips ?? 1000;
+  const aposta = recursos.currentBet ?? 0;
+  const resultado = gameState?.scores?.[0];
 
-      if (newPlayerValue > 21) {
-        setIsGameOver(true);
-      }
-    }
+  const aplicar = useCallback(
+    (movimento: GameMove) => {
+      if (!engine || !gameState) return;
+      setGameState(engine.applyMove(gameState, movimento));
+    },
+    [engine, gameState],
+  );
+
+  const apostar = (valor: number) => {
+    const movimento = movimentos.find(
+      (m) => m.type === "bet" && Number(m.data?.["amount"]) === valor,
+    );
+    if (movimento) aplicar(movimento);
   };
 
-  const handleStand = () => {
-    const standMove = validMoves.find((m: any) => m.action === "stand");
-    if (standMove) {
-      const newState = engine.applyMove(gameState, standMove);
-      setGameState(newState);
-      setIsGameOver(true);
-    }
+  const pedirCarta = () => {
+    const movimento = movimentos.find((m) => m.type === "draw");
+    if (movimento) aplicar(movimento);
   };
 
-  const handleNewGame = () => {
-    setGameState(UniversalGameFactory.createGame("card_blackjack", 2));
-    setIsGameOver(false);
+  const parar = () => {
+    const movimento = movimentos.find((m) => m.type === "pass");
+    if (movimento) aplicar(movimento);
   };
 
-  const determineWinner = () => {
-    if (playerValue > 21) return "Dealer venceu!";
-    if (dealerValue > 21) return "Você venceu!";
-    if (playerValue > dealerValue) return "Você venceu!";
-    if (dealerValue > playerValue) return "Dealer venceu!";
-    return "Empate!";
+  const novaPartida = () => {
+    setGameState(UniversalGameFactory.createGame(JOGO, JOGADORES));
   };
+
+  const apostas = movimentos
+    .filter((m) => m.type === "bet")
+    .map((m) => Number(m.data?.["amount"] ?? 0));
+
+  const mensagemFinal =
+    resultado === undefined
+      ? null
+      : resultado > 0
+        ? "Você venceu!"
+        : resultado < 0
+          ? "A casa venceu."
+          : "Empate — aposta devolvida.";
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-green-900 to-green-800 p-4">
+    <div className="min-h-screen bg-gradient-to-b from-emerald-950 to-slate-900 p-4">
       <BackButton onClick={onBack} />
-      <div className="mx-auto max-w-4xl">
+      <div className="mx-auto max-w-3xl">
         <h1 className="mb-6 text-center text-3xl font-bold text-white">Blackjack</h1>
 
-        <div className="space-y-6">
-          {/* Dealer */}
-          <div className="rounded-lg bg-green-950/50 p-6">
-            <h2 className="mb-4 text-xl font-bold text-white">Dealer</h2>
-            <div className="flex gap-3 flex-wrap">
-              {dealerHand.map((card: any, index: number) => (
-                <CardDisplay
-                  key={index}
-                  card={card}
-                  hidden={!isGameOver && index === 1}
-                />
-              ))}
-            </div>
-            {isGameOver && (
-              <p className="mt-2 text-lg font-bold text-white">
-                Total: {dealerValue}
-              </p>
-            )}
-          </div>
-
-          {/* Player */}
-          <div className="rounded-lg bg-green-950/50 p-6">
-            <h2 className="mb-4 text-xl font-bold text-white">Você</h2>
-            <div className="flex gap-3 flex-wrap">
-              {playerHand.map((card: any, index: number) => (
-                <CardDisplay key={index} card={card} />
-              ))}
-            </div>
-            <p className="mt-2 text-lg font-bold text-white">
-              Total: {playerValue}
+        <div className="mb-4 rounded-lg bg-slate-800 p-4 text-white">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-slate-300">
+              Fichas: <span className="font-bold text-white">{fichas}</span>
+            </p>
+            <p className="text-sm text-slate-300">
+              Aposta: <span className="font-bold text-white">{aposta || "—"}</span>
+            </p>
+            <p className="text-sm text-slate-300">
+              Fase: <span className="font-bold text-white">{fase === "betting" ? "Apostas" : "Jogo"}</span>
             </p>
           </div>
-
-          {/* Game Status */}
-          {isGameOver && (
-            <div className="rounded-lg bg-slate-800 p-6 text-center">
-              <p className="text-2xl font-bold text-yellow-400">
-                {determineWinner()}
-              </p>
-            </div>
-          )}
-
-          {/* Controls */}
-          {!isGameOver && (
-            <div className="flex gap-4 justify-center">
-              <button
-                onClick={handleHit}
-                className="rounded-lg bg-blue-600 px-8 py-3 font-bold text-white transition hover:bg-blue-700"
-              >
-                Pedir Carta
-              </button>
-              <button
-                onClick={handleStand}
-                className="rounded-lg bg-red-600 px-8 py-3 font-bold text-white transition hover:bg-red-700"
-              >
-                Parar
-              </button>
-            </div>
-          )}
-
-          {isGameOver && (
-            <div className="text-center">
-              <button
-                onClick={handleNewGame}
-                className="rounded-lg bg-green-600 px-8 py-3 font-bold text-white transition hover:bg-green-700"
-              >
-                Novo Jogo
-              </button>
-            </div>
+          {acabou && mensagemFinal && (
+            <p className="mt-2 text-lg font-bold text-green-400">{mensagemFinal}</p>
           )}
         </div>
+
+        {/* Dealer */}
+        <div className="mb-6 rounded-lg bg-slate-800 p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-slate-300">Banca</h3>
+            {maoDealer.length > 0 && (
+              <span className="text-sm text-slate-300">
+                Total: <span className="font-bold text-white">{valorDealer}</span>
+              </span>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {maoDealer.length === 0 && <p className="text-sm text-slate-400">Aguardando as apostas.</p>}
+            {maoDealer.map((carta, i) => (
+              // A segunda carta da banca só aparece depois que a mão fecha.
+              <Carta
+                key={carta.id}
+                texto={!acabou && i === 1 ? "?" : simboloDaCarta(carta)}
+                vermelha={!acabou && i === 1 ? false : cartaVermelha(carta)}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Jogador */}
+        <div className="mb-6 rounded-lg bg-slate-800 p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-slate-300">Sua mão</h3>
+            {minhaMao.length > 0 && (
+              <span className="text-sm text-slate-300">
+                Total:{" "}
+                <span className={meuValor > 21 ? "font-bold text-red-400" : "font-bold text-white"}>
+                  {meuValor}
+                  {meuValor > 21 ? " (estourou)" : ""}
+                </span>
+              </span>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {minhaMao.length === 0 && <p className="text-sm text-slate-400">Nenhuma carta ainda.</p>}
+            {minhaMao.map((carta) => (
+              <Carta key={carta.id} texto={simboloDaCarta(carta)} vermelha={cartaVermelha(carta)} />
+            ))}
+          </div>
+        </div>
+
+        {/* Ações */}
+        {fase === "betting" && !acabou && (
+          <div className="rounded-lg bg-slate-800 p-4">
+            <h3 className="mb-3 text-sm font-semibold text-slate-300">Escolha a aposta</h3>
+            <div className="flex flex-wrap gap-3">
+              {apostas.map((valor) => (
+                <button
+                  key={valor}
+                  onClick={() => apostar(valor)}
+                  className="rounded-lg bg-amber-600 px-6 py-3 font-bold text-white transition hover:bg-amber-700"
+                >
+                  {valor}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {fase === "playing" && !acabou && (
+          <div className="flex flex-wrap gap-3 rounded-lg bg-slate-800 p-4">
+            <button
+              onClick={pedirCarta}
+              disabled={meuValor >= 21}
+              className="rounded-lg bg-emerald-600 px-6 py-3 font-bold text-white transition hover:bg-emerald-700 disabled:opacity-50"
+            >
+              Pedir carta
+            </button>
+            <button
+              onClick={parar}
+              className="rounded-lg bg-sky-600 px-6 py-3 font-bold text-white transition hover:bg-sky-700"
+            >
+              Parar
+            </button>
+          </div>
+        )}
+
+        {acabou && (
+          <div className="mt-6 text-center">
+            <button
+              onClick={novaPartida}
+              className="rounded-lg bg-green-600 px-8 py-3 font-bold text-white transition hover:bg-green-700"
+            >
+              Novo Jogo
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

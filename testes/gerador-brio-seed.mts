@@ -133,7 +133,7 @@ CREATE TABLE IF NOT EXISTS public.brio_partidas (
   area_slug TEXT,
   subcategoria_slug TEXT,
   total_perguntas INTEGER NOT NULL DEFAULT 10 CHECK (total_perguntas BETWEEN 1 AND 50),
-  segundos_por_pergunta INTEGER NOT NULL DEFAULT 7 CHECK (segundos_por_pergunta BETWEEN 3 AND 60),
+  segundos_por_pergunta INTEGER NOT NULL DEFAULT 15 CHECK (segundos_por_pergunta BETWEEN 5 AND 60),
   status TEXT NOT NULL DEFAULT 'aguardando'
     CHECK (status IN ('aguardando','em_andamento','finalizado','abandonada')),
   rodada_atual INTEGER NOT NULL DEFAULT 0,
@@ -319,7 +319,7 @@ CREATE OR REPLACE FUNCTION public.brio_criar_partida(
   p_subcategoria_slug TEXT DEFAULT NULL,
   p_bot_nivel INTEGER DEFAULT NULL,
   p_total INTEGER DEFAULT 10,
-  p_segundos INTEGER DEFAULT 7,
+  p_segundos INTEGER DEFAULT 15,
   p_aberta BOOLEAN DEFAULT FALSE
 )
 RETURNS JSONB
@@ -331,7 +331,7 @@ DECLARE
   v_uid UUID := auth.uid();
   v_partida UUID;
   v_total INT := GREATEST(1, LEAST(COALESCE(p_total, 10), 50));
-  v_seg INT := GREATEST(3, LEAST(COALESCE(p_segundos, 7), 60));
+  v_seg INT := GREATEST(5, LEAST(COALESCE(p_segundos, 15), 60));
   v_ordem INT;
   v_linha RECORD;
   v_alt JSONB;
@@ -466,7 +466,9 @@ BEGIN
     SET status = 'em_andamento',
         iniciado_em = now(),
         rodada_atual = 1,
-        rodada_liberada_em = now()
+        -- JANELA DE LEITURA: o carimbo fica no FUTURO, então o relógio só
+        -- começa a correr depois que a pergunta já está na tela do jogador.
+        rodada_liberada_em = now() + interval '6 seconds'
     WHERE id = v_partida;
   END IF;
 
@@ -831,7 +833,7 @@ BEGIN
           desempate = TRUE,
           rodada_atual = v_p.total_perguntas + 1,
           total_perguntas = v_p.total_perguntas + 1,
-          rodada_liberada_em = now()
+          rodada_liberada_em = now() + interval '6 seconds'
       WHERE id = p_partida_id;
       RETURN public.brio_estado_partida(p_partida_id);
     END IF;
@@ -890,7 +892,7 @@ BEGIN
         acertos_1 = v_novo_a1, acertos_2 = v_novo_a2,
         rodada_atual = v_p.rodada_atual + 1,
         total_perguntas = v_p.total_perguntas + 1,
-        rodada_liberada_em = now()
+        rodada_liberada_em = now() + interval '6 seconds'
     WHERE id = p_partida_id;
     RETURN public.brio_estado_partida(p_partida_id);
   END IF;
@@ -900,7 +902,7 @@ BEGIN
   SET placar_1 = v_novo_p1, placar_2 = v_novo_p2,
       acertos_1 = v_novo_a1, acertos_2 = v_novo_a2,
       rodada_atual = v_p.rodada_atual + 1,
-      rodada_liberada_em = now()
+      rodada_liberada_em = now() + interval '6 seconds'
   WHERE id = p_partida_id;
 
   RETURN public.brio_estado_partida(p_partida_id);
@@ -949,7 +951,7 @@ BEGIN
       status = 'em_andamento',
       iniciado_em = now(),
       rodada_atual = 1,
-      rodada_liberada_em = now()
+      rodada_liberada_em = now() + interval '6 seconds'
   WHERE id = p_partida_id;
 
   RETURN public.brio_estado_partida(p_partida_id);

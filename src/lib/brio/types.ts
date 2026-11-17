@@ -10,8 +10,12 @@ import type { Dificuldade, Modalidade } from "./categorias";
 export const DUELO = {
   /** Perguntas por partida (a fase de grupos do duelo). */
   PERGUNTAS_POR_PARTIDA: 10,
-  /** Segundos por pergunta — o SERVIDOR é a autoridade do relógio. */
-  SEGUNDOS_POR_PERGUNTA: 7,
+  /**
+   * Segundos por pergunta — o SERVIDOR é a autoridade do relógio.
+   * 15s: com 7s o jogador não tinha tempo de LER o enunciado (a pergunta
+   * aparecia enquanto o relógio já corria).
+   */
+  SEGUNDOS_POR_PERGUNTA: 15,
   /** Alternativas por pergunta (A–F). */
   ALTERNATIVAS: 6,
   /** Pontos por acerto. */

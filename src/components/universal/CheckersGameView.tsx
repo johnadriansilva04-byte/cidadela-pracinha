@@ -1,74 +1,84 @@
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { BackButton } from "@/components/BackButton";
 import { UniversalGameFactory } from "@/lib/universal/UniversalGameFactory";
+import type { UniversalGameState } from "@/lib/universal/UniversalGameEngine";
+import {
+  acharJogada,
+  chaveDaCasa,
+  destinosDaCasa,
+  lerTabuleiro,
+} from "@/lib/universal/estadoTabuleiro";
 import { MCTS } from "@/lib/ai/MCTS";
 
 interface CheckersGameViewProps {
   onBack: () => void;
 }
 
+const JOGO = "board_checkers";
+
 export function CheckersGameView({ onBack }: CheckersGameViewProps) {
-  const [gameState, setGameState] = useState(() =>
-    UniversalGameFactory.createGame("board_checkers", 2)
+  const [gameState, setGameState] = useState<UniversalGameState | null>(() =>
+    UniversalGameFactory.createGame(JOGO, 2),
   );
-  const [selectedSquare, setSelectedSquare] = useState<[number, number] | null>(null);
-  const [isAIThinking, setIsAIThinking] = useState(false);
+  const [selecionada, setSelecionada] = useState<string | null>(null);
+  const [iaPensando, setIaPensando] = useState(false);
 
-  const engine = UniversalGameFactory.createEngine("board_checkers");
-  const validMoves = engine.getValidMoves(gameState);
-  const isGameOver = engine.isGameOver(gameState);
-  const winner = isGameOver ? engine.getWinner(gameState) : null;
+  const engine = useMemo(() => UniversalGameFactory.createEngine(JOGO), []);
 
-  const board = gameState.board as Array<Array<string | null>>;
+  // As peças vivem em `state.pieces` — as casas do engine ficam sem conteúdo.
+  const tabuleiro = useMemo(() => lerTabuleiro(gameState), [gameState]);
+  const movimentos = useMemo(
+    () => (engine && gameState ? engine.getValidMoves(gameState) : []),
+    [engine, gameState],
+  );
+  const acabou = engine && gameState ? engine.isGameOver(gameState) : false;
+  const vencedor = acabou && engine && gameState ? engine.getWinner(gameState) : null;
 
-  const getValidMovesForSquare = (row: number, col: number) => {
-    return validMoves.filter((move: any) => move.from[0] === row && move.from[1] === col);
-  };
+  // Origem = id da peça; destino = "x-y".
+  const destinos = useMemo(
+    () => destinosDaCasa(movimentos, selecionada ?? undefined),
+    [movimentos, selecionada],
+  );
 
-  const handleSquareClick = (row: number, col: number) => {
-    if (isGameOver || isAIThinking) return;
+  const jogarIa = useCallback(
+    (estado: UniversalGameState) => {
+      if (!engine || engine.isGameOver(estado)) return;
+      setIaPensando(true);
+      window.setTimeout(() => {
+        const mcts = new MCTS(engine, { maxIterations: 3000, timeBudgetMs: 1500 });
+        const escolha = mcts.computeMove(estado, 1);
+        setGameState(escolha.move ? engine.applyMove(estado, escolha.move) : estado);
+        setIaPensando(false);
+      }, 300);
+    },
+    [engine],
+  );
 
-    const piece = board[row][col];
-    const pieceColor = piece?.startsWith("white") ? "white" : piece?.startsWith("black") ? "black" : null;
-    const isCurrentPlayerPiece = pieceColor === (gameState.currentPlayer === 0 ? "white" : "black");
+  const clicar = (x: number, y: number) => {
+    if (acabou || iaPensando || !engine || !gameState) return;
+    const peca = tabuleiro[y]?.[x]?.piece ?? null;
 
-    if (selectedSquare) {
-      const [fromRow, fromCol] = selectedSquare;
-      const moves = getValidMovesForSquare(fromRow, fromCol);
-      const targetMove = moves.find((m: any) => m.to[0] === row && m.to[1] === col);
-
-      if (targetMove) {
-        const newState = engine.applyMove(gameState, targetMove);
-        setGameState(newState);
-        setSelectedSquare(null);
-
-        // AI move
-        if (!engine.isGameOver(newState)) {
-          setIsAIThinking(true);
-          setTimeout(() => {
-            const mcts = new MCTS(engine, { maxIterations: 3000, timeBudgetMs: 1500 });
-            const aiMove = mcts.computeMove(newState, 1);
-            const finalState = engine.applyMove(newState, aiMove.move);
-            setGameState(finalState);
-            setIsAIThinking(false);
-          }, 300);
-        }
-      } else if (isCurrentPlayerPiece) {
-        setSelectedSquare([row, col]);
-      } else {
-        setSelectedSquare(null);
+    if (selecionada) {
+      const jogada = acharJogada(movimentos, selecionada, chaveDaCasa(x, y));
+      if (jogada) {
+        const novo = engine.applyMove(gameState, jogada);
+        setGameState(novo);
+        setSelecionada(null);
+        jogarIa(novo);
+        return;
       }
-    } else if (isCurrentPlayerPiece) {
-      setSelectedSquare([row, col]);
     }
+
+    const minha = peca != null && peca.owner === gameState.currentPlayer;
+    setSelecionada(minha ? peca.id : null);
   };
 
-  const handleNewGame = () => {
-    setGameState(UniversalGameFactory.createGame("board_checkers", 2));
-    setSelectedSquare(null);
+  const novaPartida = () => {
+    setGameState(UniversalGameFactory.createGame(JOGO, 2));
+    setSelecionada(null);
   };
 
-  const isLightSquare = (row: number, col: number) => (row + col) % 2 === 0;
+  const casaClara = (x: number, y: number) => (x + y) % 2 === 0;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 p-4">
@@ -79,70 +89,77 @@ export function CheckersGameView({ onBack }: CheckersGameViewProps) {
         <div className="mb-4 rounded-lg bg-slate-800 p-4 text-white">
           <div className="flex items-center justify-between">
             <p className="text-sm text-slate-300">
-              Turno: <span className="font-bold text-white">{gameState.currentPlayer === 0 ? "Brancas" : "Pretas"}</span>
+              Turno:{" "}
+              <span className="font-bold text-white">
+                {gameState?.currentPlayer === 0 ? "Vermelho" : "Preto"}
+              </span>
             </p>
-            {isAIThinking && (
-              <p className="text-sm text-yellow-400">IA pensando...</p>
-            )}
+            {iaPensando && <p className="text-sm text-yellow-400">IA pensando...</p>}
           </div>
-          {isGameOver && (
+          {acabou && (
             <p className="mt-2 text-lg font-bold text-green-400">
-              {winner === null ? "Empate!" : winner === 0 ? "Brancas venceram!" : "Pretas venceram!"}
+              {vencedor === null
+                ? "Empate!"
+                : vencedor === 0
+                  ? "Vermelho venceu!"
+                  : "Preto venceu!"}
             </p>
           )}
         </div>
 
         <div className="mx-auto max-w-md">
-          <div className="grid aspect-square grid-cols-8 rounded-lg overflow-hidden shadow-2xl">
-            {board.map((row, rowIndex) =>
-              row.map((piece, colIndex) => {
-                const isSelected = selectedSquare?.[0] === rowIndex && selectedSquare?.[1] === colIndex;
-                const validMoves = selectedSquare ? getValidMovesForSquare(selectedSquare[0], selectedSquare[1]) : [];
-                const isValidTarget = validMoves.some((m: any) => m.to[0] === rowIndex && m.to[1] === colIndex);
-
+          <div className="grid aspect-square grid-cols-8 overflow-hidden rounded-lg shadow-2xl">
+            {tabuleiro.map((linha, y) =>
+              linha.map((casa, x) => {
+                const peca = casa.piece;
+                const chave = chaveDaCasa(x, y);
+                const selecionadaAqui = peca != null && selecionada === peca.id;
+                const alvo = destinos.has(chave);
+                const dama = peca?.data?.["isKing"] === true;
                 return (
                   <button
-                    key={`${rowIndex}-${colIndex}`}
-                    onClick={() => handleSquareClick(rowIndex, colIndex)}
-                    disabled={isGameOver || isAIThinking}
-                    className={`
-                      flex aspect-square items-center justify-center transition-all duration-150
-                      ${isLightSquare(rowIndex, colIndex) ? "bg-amber-100" : "bg-amber-700"}
-                      ${isSelected ? "bg-blue-400!" : ""}
-                      ${isValidTarget ? "bg-green-400!" : ""}
-                      ${!isGameOver && !isAIThinking ? "hover:opacity-80" : "cursor-not-allowed"}
-                    `}
+                    key={chave}
+                    onClick={() => clicar(x, y)}
+                    disabled={acabou || iaPensando}
+                    aria-label={`Casa ${chave}`}
+                    className={[
+                      "flex aspect-square items-center justify-center transition-all duration-150",
+                      casaClara(x, y) ? "bg-amber-100" : "bg-amber-700",
+                      selecionadaAqui ? "bg-blue-400!" : "",
+                      alvo ? "bg-green-400!" : "",
+                      !acabou && !iaPensando ? "hover:opacity-80" : "cursor-not-allowed",
+                    ].join(" ")}
                   >
-                    {piece && (
+                    {peca && (
                       <div
-                        className={`
-                          h-10 w-10 rounded-full border-4 shadow-lg
-                          ${piece?.startsWith("white")
-                            ? "bg-white border-slate-300"
-                            : "bg-slate-900 border-slate-700"}
-                        `}
+                        className={[
+                          "flex h-10 w-10 items-center justify-center rounded-full border-4 shadow-lg",
+                          peca.owner === 0
+                            ? "border-red-300 bg-red-600"
+                            : "border-slate-700 bg-slate-900",
+                        ].join(" ")}
                       >
-                        {piece?.includes("king") && (
-                          <div className="flex h-full items-center justify-center text-2xl font-bold text-amber-500">
+                        {dama && (
+                          <span className="text-2xl font-bold text-amber-400" aria-hidden>
                             ♛
-                          </div>
+                          </span>
                         )}
                       </div>
                     )}
-                    {isValidTarget && !piece && (
+                    {alvo && !peca && (
                       <div className="h-3 w-3 rounded-full bg-green-500 opacity-60" />
                     )}
                   </button>
                 );
-              })
+              }),
             )}
           </div>
         </div>
 
-        {isGameOver && (
+        {acabou && (
           <div className="mt-6 text-center">
             <button
-              onClick={handleNewGame}
+              onClick={novaPartida}
               className="rounded-lg bg-green-600 px-8 py-3 font-bold text-white transition hover:bg-green-700"
             >
               Novo Jogo

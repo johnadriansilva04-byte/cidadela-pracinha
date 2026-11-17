@@ -4,15 +4,25 @@ type BackButtonProps = {
   /** Label opcional ao lado do ícone. */
   label?: string;
   className?: string;
+  /**
+   * Ação de voltar. Quando existe, tem PRECEDÊNCIA sobre o histórico: os jogos
+   * que vivem dentro de /cidadela precisam voltar ao hub da Cidadela, e
+   * `history.back()` levaria o jogador para fora da página.
+   */
+  onClick?: (() => void) | undefined;
 };
 
 /**
  * Botão de voltar simples e confiável.
- * Usa window.history.back() — sempre retorna à página anterior real.
- * Se não houver histórico, volta para /.
+ * Com `onClick`, executa a ação recebida. Sem ele, usa window.history.back()
+ * (página anterior real) e, sem histórico, volta para /.
  */
-export function BackButton({ label, className }: BackButtonProps) {
+export function BackButton({ label, className, onClick }: BackButtonProps) {
   const handleBack = () => {
+    if (onClick) {
+      onClick();
+      return;
+    }
     if (window.history.length > 1) {
       window.history.back();
     } else {

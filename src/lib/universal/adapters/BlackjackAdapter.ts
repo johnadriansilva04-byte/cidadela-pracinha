@@ -183,8 +183,12 @@ export class BlackjackAdapter implements UniversalGameEngine {
     newState.moveHistory.push(move);
     newState.lastMove = move;
 
-    // Verifica se todos jogaram
-    const allPlayed = newState.players.every((p) => p.eliminated || p.hand.length > 0);
+    // Todos JÁ AGIRAM? O critério é `eliminated` (parou ou estourou), marcado
+    // pelo `pass`/estouro. A versão anterior usava `p.hand.length > 0`, que é
+    // verdadeiro logo após a distribuição das cartas — a mão do dealer era
+    // resolvida na mesma jogada da aposta e o jogador NUNCA conseguia pedir
+    // carta ou parar.
+    const allPlayed = newState.players.every((p) => p.eliminated);
     if (allPlayed && newState.phase === "playing") {
       // Vez do dealer
       this.playDealer(newState);
