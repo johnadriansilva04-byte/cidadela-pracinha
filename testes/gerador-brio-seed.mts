@@ -10,13 +10,14 @@ import { writeFileSync } from "node:fs";
 import { ACERVO_BRIO_EQUILIBRADO } from "../src/lib/brio/acervo";
 import { AREAS } from "../src/lib/brio/categorias";
 import { assinaturaPergunta } from "../src/lib/brio/selecao";
+import { B_INICIAL } from "../src/lib/brio/tri";
 
 const esc = (s: string) => s.replace(/'/g, "''");
 
 function sqlPergunta(p: (typeof ACERVO_BRIO_EQUILIBRADO)[number]): string {
   const alts = JSON.stringify(p.alternativas);
   const assinatura = assinaturaPergunta(p.enunciado, p.alternativas);
-  return `  ('${esc(p.id)}', '${esc(p.areaSlug)}', '${esc(p.subcategoriaSlug)}', '${esc(p.dificuldade)}', ${p.ordem}, '${esc(p.enunciado)}', '${esc(alts)}'::jsonb, '${p.letraCorreta}', '${esc(p.explicacao)}', ${p.referencia ? `'${esc(p.referencia)}'` : "NULL"}, '${esc(assinatura)}', 'aprovada', TRUE, 1)`;
+  return `  ('${esc(p.id)}', '${esc(p.areaSlug)}', '${esc(p.subcategoriaSlug)}', '${esc(p.dificuldade)}', ${p.ordem}, '${esc(p.enunciado)}', '${esc(alts)}'::jsonb, '${p.letraCorreta}', '${esc(p.explicacao)}', ${p.referencia ? `'${esc(p.referencia)}'` : "NULL"}, '${esc(assinatura)}', 'aprovada', TRUE, 1, ${B_INICIAL[p.dificuldade]})`;
 }
 
 const categoriasSql = AREAS.map(
@@ -90,6 +91,8 @@ CREATE TABLE IF NOT EXISTS public.brio_questions (
   tri_b NUMERIC NOT NULL DEFAULT 0.0,
   tri_c NUMERIC NOT NULL DEFAULT 0.1667,
   tri_provisorio BOOLEAN NOT NULL DEFAULT TRUE,
+  -- Motivo de suspeita (NULL = ok). Item suspeito SAI da seleção.
+  tri_suspeita TEXT,
   -- Controle de uso (frequência) e histórico
   usos INTEGER NOT NULL DEFAULT 0,
   ultimo_uso_em TIMESTAMPTZ,
@@ -114,6 +117,9 @@ CREATE INDEX IF NOT EXISTS brio_questions_selecao_idx
   WHERE ativa = TRUE AND status = 'aprovada';
 CREATE INDEX IF NOT EXISTS brio_questions_uso_idx
   ON public.brio_questions (usos, ultimo_uso_em) WHERE ativa = TRUE;
+
+-- O CREATE TABLE IF NOT EXISTS não adiciona coluna em banco já existente.
+ALTER TABLE public.brio_questions ADD COLUMN IF NOT EXISTS tri_suspeita TEXT;
 
 ALTER TABLE public.brio_questions ENABLE ROW LEVEL SECURITY;
 -- Sem policies: o acervo é acessível APENAS por RPC (a correta não vaza).
@@ -394,6 +400,9 @@ BEGIN
     FROM public.brio_questions q
     WHERE q.ativa = TRUE AND q.status = 'aprovada'
       AND NOT (q.id = ANY(v_usados))
+      -- Item com comportamento suspeito não entra na avaliação (§5.4). Se a
+      -- categoria inteira estiver marcada, o fallback abaixo evita jogo vazio.
+      AND q.tri_suspeita IS NULL
       AND (
         (p_modalidade = 'subcategoria' AND q.subcategoria_slug = p_subcategoria_slug)
         OR (p_modalidade = 'categoria' AND q.area_slug = p_area_slug)
@@ -1146,6 +1155,29 @@ $$;
 REVOKE ALL ON FUNCTION public.brio_recalcular_habilidade(INTEGER) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.brio_recalcular_habilidade(INTEGER) TO authenticated;
 
+-- ---------- 15b. Dificuldade declarada → b inicial (espelha tri.ts) ----------
+-- O "b" inicial NÃO é 0 para todo mundo: a dificuldade declarada é a
+-- estimativa provisória de onde fica o ponto de 50% de acerto. Sem isto o
+-- importador em lote gravava b=0 em tudo e a TRI tratava uma questão fácil e
+-- uma de especialista como idênticas.
+CREATE OR REPLACE FUNCTION public.brio_b_inicial(p_dificuldade TEXT)
+RETURNS NUMERIC
+LANGUAGE sql
+IMMUTABLE
+AS $$
+  SELECT CASE p_dificuldade
+    WHEN 'facil' THEN -1.5
+    WHEN 'intermediaria' THEN -0.7
+    WHEN 'dificil' THEN 0.0
+    WHEN 'avancada' THEN 0.8
+    WHEN 'especialista' THEN 1.7
+    ELSE 0.0
+  END;
+$$;
+
+REVOKE ALL ON FUNCTION public.brio_b_inicial(TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.brio_b_inicial(TEXT) TO service_role;
+
 -- ---------- 16. RPC: alimentação em LOTE (infra para milhões) ----------
 -- Recebe um JSONB array de perguntas e insere/atualiza de uma vez.
 -- Ignora duplicatas por assinatura (antirrepetição editorial) e devolve
@@ -1249,7 +1281,9 @@ BEGIN
       FALSE,
       1,
       COALESCE((v_item->>'tri_a')::NUMERIC, 1.0),
-      COALESCE((v_item->>'tri_b')::NUMERIC, 0.0),
+      -- Sem tri_b no payload, deriva da dificuldade declarada (não 0.0).
+      COALESCE((v_item->>'tri_b')::NUMERIC,
+               public.brio_b_inicial(COALESCE(v_item->>'dificuldade', 'dificil'))),
       COALESCE((v_item->>'tri_c')::NUMERIC, 0.1667),
       TRUE,
       p_origem
@@ -1296,6 +1330,145 @@ $$;
 
 REVOKE ALL ON FUNCTION public.brio_aprovar_perguntas(TEXT[]) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.brio_aprovar_perguntas(TEXT[]) TO service_role;
+
+-- ---------- 17b. RPC: CALIBRAR os itens com as respostas reais (§5.4) ----------
+-- Esta é a peça que faltava: a tabela brio_calibracao existia mas NINGUÉM
+-- escrevia nela, e brio_questions.tri_* nunca era atualizado — os parâmetros
+-- ficavam provisórios para sempre. Aqui o acervo aprende com o comportamento
+-- real: recalcula discriminação (ponto-bisserial) e dificuldade (inverso da
+-- 3PL), com SHRINKAGE para o valor provisório, e marca suspeitos.
+--
+-- Rodar como service_role (job administrativo), nunca pelo cliente:
+--   SELECT public.brio_calibrar();
+CREATE OR REPLACE FUNCTION public.brio_calibrar(p_minimo INTEGER DEFAULT 30)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_rec RECORD;
+  v_n INTEGER;
+  v_prop NUMERIC;
+  v_media NUMERIC;
+  v_var NUMERIC;
+  v_disc NUMERIC;
+  v_peso NUMERIC;
+  v_a NUMERIC;
+  v_q NUMERIC;
+  v_b NUMERIC;
+  v_provisorio BOOLEAN;
+  v_suspeita TEXT;
+  v_itens INTEGER := 0;
+  v_calibrados INTEGER := 0;
+  v_suspeitos INTEGER := 0;
+  -- Shrinkage: peso da amostra real na estimativa.
+  k_shrink CONSTANT NUMERIC := 30;
+  k_minimo CONSTANT INTEGER := GREATEST(5, COALESCE(p_minimo, 30));
+BEGIN
+  -- 1. Agrega as respostas HUMANAS por item. O adversário virtual não tem
+  --    linha em brio_habilidade, então o JOIN o exclui: ele não é respondente
+  --    real e não pode contaminar a calibração.
+  DROP TABLE IF EXISTS _brio_cal;
+  CREATE TEMP TABLE _brio_cal ON COMMIT DROP AS
+  SELECT rod.pergunta_id,
+         COUNT(*)::INT AS n,
+         COUNT(*) FILTER (WHERE r.acertou)::INT AS n_acertos,
+         COALESCE(SUM(h.theta), 0) AS soma_theta,
+         COALESCE(SUM(h.theta * h.theta), 0) AS soma_theta2,
+         COALESCE(SUM(h.theta * (CASE WHEN r.acertou THEN 1 ELSE 0 END)), 0) AS soma_theta_acerto
+  FROM public.brio_respostas r
+  JOIN public.brio_rodadas rod
+    ON rod.partida_id = r.partida_id AND rod.numero = r.rodada_numero
+  JOIN public.brio_habilidade h
+    ON h.user_id = r.jogador_id AND h.area_slug IS NULL
+  WHERE r.acertou IS NOT NULL
+  GROUP BY rod.pergunta_id;
+
+  -- 2. Acumulado por item: é o que permite recalibrar SEM reprocessar todo o
+  --    histórico de respostas.
+  INSERT INTO public.brio_calibracao
+    (pergunta_id, n_respostas, n_acertos, soma_theta, soma_theta2, soma_theta_acerto, atualizado_em)
+  SELECT pergunta_id, n, n_acertos, soma_theta, soma_theta2, soma_theta_acerto, now()
+  FROM _brio_cal
+  ON CONFLICT (pergunta_id) DO UPDATE SET
+    n_respostas = EXCLUDED.n_respostas,
+    n_acertos = EXCLUDED.n_acertos,
+    soma_theta = EXCLUDED.soma_theta,
+    soma_theta2 = EXCLUDED.soma_theta2,
+    soma_theta_acerto = EXCLUDED.soma_theta_acerto,
+    atualizado_em = now();
+
+  SELECT COUNT(*) INTO v_itens FROM _brio_cal;
+
+  -- 3. Reestima os parâmetros de cada item.
+  FOR v_rec IN
+    SELECT c.pergunta_id, c.n, c.n_acertos, c.soma_theta, c.soma_theta2,
+           c.soma_theta_acerto, q.tri_a, q.tri_b, q.tri_c
+    FROM _brio_cal c
+    JOIN public.brio_questions q ON q.id = c.pergunta_id
+  LOOP
+    v_n := GREATEST(1, v_rec.n);
+    v_prop := v_rec.n_acertos::NUMERIC / v_n;
+    v_media := v_rec.soma_theta / v_n;
+    v_var := GREATEST(0, v_rec.soma_theta2 / v_n - v_media * v_media);
+
+    -- Discriminação ponto-bisserial: correlação entre θ e o acerto.
+    v_disc := 0;
+    IF v_var > 1e-9 AND v_prop > 0 AND v_prop < 1 THEN
+      v_disc := (v_rec.soma_theta_acerto / v_n - v_media * v_prop)
+                / sqrt(v_var * v_prop * (1 - v_prop));
+    END IF;
+
+    v_peso := v_n / (v_n + k_shrink);
+
+    -- a: mapeada da ponto-bisserial, puxada para o provisório.
+    v_a := LEAST(2.5, GREATEST(0.3,
+             v_peso * (1.0 + 1.6 * v_disc) + (1 - v_peso) * v_rec.tri_a));
+
+    -- b: inverso fechado da 3PL no θ médio dos respondentes.
+    --   P = c + (1−c)/(1+e^(−a(θ−b)))  ⇒  b = θ̄ + ln((1−q)/q)/a,  q = (P−c)/(1−c)
+    -- Item fácil (P alto) ⇒ q alto ⇒ ln negativo ⇒ b baixo. Confere.
+    v_q := LEAST(1 - 1e-6, GREATEST(1e-6, (v_prop - v_rec.tri_c) / GREATEST(1e-9, 1 - v_rec.tri_c)));
+    v_b := LEAST(4, GREATEST(-4,
+             v_peso * (v_media + ln((1 - v_q) / v_q) / v_a) + (1 - v_peso) * v_rec.tri_b));
+
+    -- 4. Diagnóstico de qualidade: item que se comporta mal sai da avaliação.
+    v_suspeita := NULL;
+    IF v_n >= k_minimo THEN
+      IF v_prop < GREATEST(v_rec.tri_c, 0.1667) - 0.03 THEN
+        v_suspeita := 'acerto abaixo do esperado por chute (possível erro de gabarito)';
+      ELSIF v_disc < -0.1 THEN
+        v_suspeita := 'discriminação negativa (melhores jogadores erram mais)';
+      END IF;
+    END IF;
+
+    v_provisorio := v_n < k_minimo;
+    IF v_suspeita IS NOT NULL THEN v_suspeitos := v_suspeitos + 1; END IF;
+    IF NOT v_provisorio THEN v_calibrados := v_calibrados + 1; END IF;
+
+    UPDATE public.brio_questions
+    SET tri_a = v_a, tri_b = v_b, tri_provisorio = v_provisorio, tri_suspeita = v_suspeita
+    WHERE id = v_rec.pergunta_id;
+
+    UPDATE public.brio_calibracao
+    SET tri_a = v_a, tri_b = v_b, tri_c = v_rec.tri_c,
+        provisorio = v_provisorio, suspeita = v_suspeita, atualizado_em = now()
+    WHERE pergunta_id = v_rec.pergunta_id;
+  END LOOP;
+
+  RETURN jsonb_build_object(
+    'itens_avaliados', v_itens,
+    'calibrados', v_calibrados,
+    'provisorios', v_itens - v_calibrados,
+    'suspeitos', v_suspeitos,
+    'minimo_amostra', k_minimo
+  );
+END
+$$;
+
+REVOKE ALL ON FUNCTION public.brio_calibrar(INTEGER) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.brio_calibrar(INTEGER) TO service_role;
 
 -- ---------- 18. RPC: estatísticas do acervo (diagnóstico) ----------
 CREATE OR REPLACE FUNCTION public.brio_estatisticas()
@@ -1345,11 +1518,15 @@ ON CONFLICT (slug) DO UPDATE SET
 -- ---------- 20. Seed: perguntas curadas (${ACERVO_BRIO_EQUILIBRADO.length}) ----------
 INSERT INTO public.brio_questions
   (id, area_slug, subcategoria_slug, dificuldade, ordem, enunciado, alternativas,
-   letra_correta, explicacao, referencia, assinatura, status, ativa, versao)
+   letra_correta, explicacao, referencia, assinatura, status, ativa, versao, tri_b)
 VALUES
 ${ACERVO_BRIO_EQUILIBRADO.map(sqlPergunta).join(",\n")}
 ON CONFLICT (id) DO UPDATE SET
   area_slug = EXCLUDED.area_slug,
+  -- O seed MANDA o tri_b inicial por dificuldade. Sem isto o DEFAULT 0.0 do
+  -- schema nivelava facil e especialista (a TRI tratava todas como iguais) e
+  -- nem o reimportar corrigia perguntas ja gravadas.
+  tri_b = EXCLUDED.tri_b,
   subcategoria_slug = EXCLUDED.subcategoria_slug,
   dificuldade = EXCLUDED.dificuldade,
   ordem = EXCLUDED.ordem,

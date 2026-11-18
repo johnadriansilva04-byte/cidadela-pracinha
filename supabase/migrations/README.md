@@ -94,14 +94,18 @@ migração é aplicada **manualmente** colando o conteúdo do arquivo no
     referência, categoria/subcategoria, dificuldade, parâmetros TRI
     `tri_a`/`tri_b`/`tri_c`, `assinatura` de antirrepetição, `status`
     rascunho/revisão/aprovada), catálogo de áreas/subcategorias
-    (`brio_areas`, `brio_subcategorias`), partidas sincronizadas
-    (`brio_partidas`, `brio_partida_questoes`, `brio_respostas` com RLS
-    `user_id = auth.uid()`) e o índice de conhecimento por área
-    (`brio_habilidade`). RPCs: `brio_importar_lote` (alimentação em lote —
-    **só `service_role`**), `brio_aprovar_perguntas` (revisão editorial),
-    `brio_buscar_questoes` (sorteio ponderado com antirrepetição),
-    `brio_criar_partida`, `brio_registrar_resposta`, `brio_finalizar_partida`
-    e `brio_meu_indice`.
+    (`brio_categorias` — área e subcategoria na MESMA tabela, via `area_slug`
+    nulo ou não), partidas sincronizadas (`brio_partidas`, `brio_rodadas`,
+    `brio_respostas`) e o índice de conhecimento por área (`brio_habilidade`),
+    mais a calibração acumulada por item (`brio_calibracao`).
+    RPCs de jogo: `brio_catalogo`, `brio_criar_partida`, `brio_entrar_partida`,
+    `brio_estado_partida`, `brio_responder`, `brio_fechar_rodada`,
+    `brio_listar_partidas`, `brio_meu_indice`, `brio_recalcular_habilidade`
+    e `brio_estatisticas`.
+    RPCs administrativas (**só `service_role`**): `brio_importar_lote`,
+    `brio_aprovar_perguntas`, `brio_calibrar` e o auxiliar `brio_b_inicial`.
+    O acesso às tabelas é SÓ por RPC: `brio_questions` não tem policy alguma,
+    porque `letra_correta` não pode vazar para o cliente antes da revelação.
     **Aplicação:** rode o arquivo inteiro no SQL Editor (idempotente).
     **Alimentação contínua do acervo** (não é SQL — é script, e exige a
     `service_role`):
@@ -118,6 +122,10 @@ migração é aplicada **manualmente** colando o conteúdo do arquivo no
     # 3. revisão editorial em lote (publica o que estava em revisão)
     SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
       node scripts/brio-importar.mjs --aprovar acervo-curado
+
+    # 4. recalibra os itens com as respostas reais (idempotente)
+    SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
+      node scripts/brio-importar.mjs --calibrar 30
     ```
 
     O importador valida (6 alternativas, gabarito A–F, explicação, categoria,
@@ -139,6 +147,21 @@ migração é aplicada **manualmente** colando o conteúdo do arquivo no
     Alternativa sem reaplicar o SQL: `node scripts/brio-importar.mjs --acervo
     acervo-curado` (exige `SUPABASE_SERVICE_ROLE_KEY`), que faz o mesmo pelo
     caminho da RPC com deduplicação por assinatura.
+
+    **CALIBRAÇÃO DA TRI (`brio_calibrar`)**: a dificuldade declarada é só a
+    estimativa INICIAL de `tri_b` (`brio_b_inicial`: fácil −1,5 …
+    especialista +1,7). O acervo aprende com o comportamento real quando
+    `brio_calibrar` roda: recalcula a discriminação (ponto-bisserial) e a
+    dificuldade (inverso da 3PL) com SHRINKAGE para o valor provisório, e
+    grava o acumulado em `brio_calibracao` — o que permite recalibrar sem
+    reprocessar o histórico inteiro. Enquanto um item tiver menos de
+    `p_minimo` respostas (padrão 30) ele continua `tri_provisorio = TRUE`; é
+    HONESTO dizer provisório, não calibrado. Itens com comportamento suspeito
+    (acerto abaixo do chute ou discriminação negativa) ganham `tri_suspeita` e
+    SAEM da seleção de perguntas.
+    **Sempre que reaplicar o arquivo, rode `--calibrar` depois**: o seed
+    reescreve `tri_b` com o valor inicial por dificuldade, o que é correto
+    para item novo, mas descarta a calibração já acumulada.
 
 ## Como verificar se o SOV BANK está operacional
 

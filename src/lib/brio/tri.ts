@@ -38,7 +38,7 @@ export interface ParametrosItem {
 export const ACERTO_CASUAL = 1 / 6;
 
 /** Dificuldade declarada → `b` inicial (logits). Estimativa, não verdade. */
-const B_INICIAL: Record<Dificuldade, number> = {
+export const B_INICIAL: Record<Dificuldade, number> = {
   facil: -1.5,
   intermediaria: -0.7,
   dificil: 0.0,

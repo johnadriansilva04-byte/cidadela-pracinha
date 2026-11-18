@@ -187,6 +187,27 @@ async function aprovar(origem) {
   console.log(`Aprovadas: ${r?.aprovadas ?? 0} de ${ids.length} em revisão.`);
 }
 
+/**
+ * Recalibra os itens a partir das respostas reais (brio_calibrar).
+ *
+ * É operação administrativa e IDEMPOTENTE: pode rodar quantas vezes quiser.
+ * Enquanto um item tiver menos que o mínimo de respostas, ele continua
+ * provisório — o relatório diz quantos de cada.
+ */
+async function calibrar(minimo) {
+  const r = await rpc("brio_calibrar", { p_minimo: minimo });
+  if (!r) {
+    console.log("Calibração não respondeu — a migration foi aplicada?");
+    return;
+  }
+  console.log("Calibração concluída:");
+  console.log(`  itens avaliados: ${r.itens_avaliados ?? 0}`);
+  console.log(`  calibrados (amostra suficiente): ${r.calibrados ?? 0}`);
+  console.log(`  ainda provisórios: ${r.provisorios ?? 0}`);
+  console.log(`  marcados como suspeitos: ${r.suspeitos ?? 0}`);
+  console.log(`  amostra mínima por item: ${r.minimo_amostra ?? "-"}`);
+}
+
 async function importar(perguntas, origem) {
   const { validas, invalidas } = validarLote(perguntas);
   const { unicas, repetidas } = deduplicar(validas);
@@ -229,7 +250,8 @@ function ajuda() {
       "  node scripts/brio-importar.mjs <lote.json> [origem]\n" +
       "  node scripts/brio-importar.mjs --lotes <diretorio> [origem]\n" +
       "  node scripts/brio-importar.mjs --acervo [origem]\n" +
-      "  node scripts/brio-importar.mjs --aprovar <origem>",
+      "  node scripts/brio-importar.mjs --aprovar <origem>\n" +
+      "  node scripts/brio-importar.mjs --calibrar [minimo_amostra]",
   );
 }
 
@@ -253,6 +275,11 @@ async function main() {
 
   if (arg === "--aprovar") {
     await aprovar(process.argv[3] ?? "lote");
+    return;
+  }
+
+  if (arg === "--calibrar") {
+    await calibrar(Number(process.argv[3] ?? 30));
     return;
   }
 
