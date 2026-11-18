@@ -86,6 +86,20 @@ checar(/Contra quem/i.test(t3), "avançou para a etapa do adversário");
 checar(/RECOMENDADO/i.test(t3), "o adversário recomendado vem marcado");
 checar(/15 segundos por pergunta/i.test(t3), "o resumo mostra o formato da partida");
 
+// ------------------------------------ ONLINE SEMPRE VISÍVEL (com motivo)
+// Antes a seção de convite SUMIA para quem não estava logado e o jogador
+// perguntava "cadê o online?". Agora ela aparece sempre; sem conta, o botão
+// fica desabilitado DIZENDO o motivo.
+const conviteVisivel = await page.evaluate(() => Boolean(document.querySelector("[data-brio-modo=\"convite\"]")));
+checar(conviteVisivel, "a opção de convidar SEMPRE aparece (mesmo sem conta)");
+const motivo = await page.evaluate(() => {
+  const b = document.querySelector('[data-brio-modo="convite"]');
+  return b ? (b.querySelector(".pj-opcao-desc")?.textContent || "").trim() : "";
+});
+checar(/Entre na Cidadela/i.test(motivo), `sem conta, o botão diz o motivo (lido: "${motivo}")`);
+const desabilitado = await page.evaluate(() => document.querySelector('[data-brio-modo="convite"]')?.disabled === true);
+checar(desabilitado, "sem conta, o botão de convite fica desabilitado (não promete o que não faz)");
+
 // ---------------------------------------------- CLIMA NA CAMPANHA
 // "← Anterior" volta UMA etapa; a landing exige voltar até o passo 0 e então
 // "← Voltar". (Antes eu clicava uma vez só e caía na etapa de modalidade.)

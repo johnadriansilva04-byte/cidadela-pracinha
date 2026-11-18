@@ -84,7 +84,11 @@ export function LobbyBrio({ nomeJogador, onIniciar, carregando, erro, podeConvid
   );
 
   // Sem backend não existe convite: evita iniciar uma sala que não sincroniza.
-  const conviteEfetivo = convite && podeConvidar && !modoLocal;
+  const conviteDisponivel = podeConvidar && !modoLocal;
+  const motivoSemConvite = !podeConvidar
+    ? "Entre na Cidadela para jogar com um amigo"
+    : "Duelo online indisponível agora — jogue contra o adversário virtual";
+  const conviteEfetivo = convite && conviteDisponivel;
 
   // ------------------------------------------------------------- etapas
   // Só entram no fluxo as etapas que se aplicam à modalidade escolhida.
@@ -257,10 +261,10 @@ export function LobbyBrio({ nomeJogador, onIniciar, carregando, erro, podeConvid
             decidir, como um humano.
           </p>
 
-          {/* Convite exige o backend: sem ele o duelo cairia no adversário
-              virtual, prometendo algo que não acontece. */}
-          {podeConvidar && !modoLocal && (
-            <div className="pj-opcoes pj-opcoes--duas" style={{ marginBottom: "0.7rem" }}>
+          {/* O convite é SEMPRE visível — esconder fazia o jogador perguntar
+              "cadê o online?". Quando não dá para convidar, o botão aparece
+              desabilitado DIZENDO o motivo, em vez de sumir sem explicação. */}
+          <div className="pj-opcoes pj-opcoes--duas" style={{ marginBottom: "0.7rem" }}>
               <button
                 type="button"
                 className={`pj-opcao ${!convite ? "pj-opcao--ativo" : ""}`}
@@ -278,21 +282,25 @@ export function LobbyBrio({ nomeJogador, onIniciar, carregando, erro, podeConvid
               </button>
               <button
                 type="button"
-                className={`pj-opcao ${convite ? "pj-opcao--ativo" : ""}`}
-                onClick={() => setConvite(true)}
-                aria-pressed={convite}
+                className={`pj-opcao ${convite && conviteDisponivel ? "pj-opcao--ativo" : ""}`}
+                onClick={() => conviteDisponivel && setConvite(true)}
+                aria-pressed={convite && conviteDisponivel}
+                disabled={!conviteDisponivel}
+                title={conviteDisponivel ? undefined : motivoSemConvite}
                 data-brio-modo="convite"
+                data-brio-convite-indisponivel={conviteDisponivel ? undefined : "1"}
               >
                 <span className="pj-opcao-icone" aria-hidden>
                   ⚔️
                 </span>
                 <span className="pj-opcao-corpo">
                   <span className="pj-opcao-nome">Convidar um amigo</span>
-                  <span className="pj-opcao-desc">Dois humanos, sala sincronizada</span>
+                  <span className="pj-opcao-desc">
+                    {conviteDisponivel ? "Dois humanos, sala sincronizada" : motivoSemConvite}
+                  </span>
                 </span>
               </button>
             </div>
-          )}
 
           {conviteEfetivo ? (
             <p className="brio-sub" style={{ marginTop: 0 }}>
