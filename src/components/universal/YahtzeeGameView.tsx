@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { BackButton } from "@/components/BackButton";
+import { ArenaJogo } from "@/components/universal/ArenaJogo";
 import { UniversalGameFactory } from "@/lib/universal/UniversalGameFactory";
 import type { GameMove, UniversalGameState } from "@/lib/universal/UniversalGameEngine";
 import {
@@ -241,112 +241,82 @@ export function YahtzeeGameView({ onBack, forca, onFim }: YahtzeeGameViewProps) 
     );
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 p-4">
-      <BackButton onClick={onBack} />
-      <div className="mx-auto max-w-4xl">
-        <h1 className="mb-6 text-center text-3xl font-bold text-white">Yahtzee</h1>
-
-        <div className="mb-4 rounded-lg bg-slate-800 p-4 text-white">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-slate-300">
-              Jogador: <span className="font-bold text-white">{jogadorAtual === 0 ? "Você" : "IA"}</span>
-            </p>
-            <p className="text-sm text-slate-300">
-              Rolagens restantes:{" "}
-              <span className="font-bold text-white">{rolagensRestantes}</span>
-            </p>
-          </div>
-          {acabou && (
-            <p className="mt-2 text-lg font-bold text-green-400">
-              {vencedor === null ? "Empate!" : vencedor === 0 ? "Você venceu!" : "IA venceu!"}
-            </p>
-          )}
+    <ArenaJogo
+      titulo="Yahtzee"
+      onBack={onBack}
+      turno={acabou ? undefined : jogadorAtual === 0 ? "Você" : "IA"}
+      iaPensando={iaPensando}
+      status={
+        <span className="arena-turno">
+          <span className="arena-turno-rot">Rolagens restantes:</span>
+          <strong>{rolagensRestantes}</strong>
+        </span>
+      }
+      versus={{ eu: "Você", oponente: "IA" }}
+      pontos={{ eu: totalDe(meuPlacar), oponente: totalDe(placarIa) }}
+      acabou={acabou}
+      resultado={
+        acabou ? (vencedor === null ? "empate" : vencedor === 0 ? "vitoria" : "derrota") : null
+      }
+      mensagemFim={acabou ? (vencedor === null ? "Empate!" : "Cartela fechada!") : null}
+      acoes={
+        minhaVez && rolagensRestantes > 0 ? (
+          <button onClick={rolar} className="arena-btn arena-btn--primario">
+            Rolar Dados
+          </button>
+        ) : null
+      }
+      onNovoJogo={novaPartida}
+    >
+      <div className="arena-placa">
+        <p className="arena-placa-titulo">Dados</p>
+        <div className="flex flex-wrap justify-center gap-4">
+          {dados.map((valor, indice) => (
+            <Dado
+              key={indice}
+              valor={valor}
+              mantido={mantidos.includes(indice)}
+              onClick={minhaVez && rolagensRestantes > 0 && !iaPensando ? () => alternarMantido(indice) : undefined}
+            />
+          ))}
         </div>
-
-        <div className="mb-6 rounded-lg bg-slate-800 p-6">
-          <h3 className="mb-4 text-lg font-semibold text-white">Dados</h3>
-          <div className="flex flex-wrap justify-center gap-4">
-            {dados.map((valor, indice) => (
-              <Dado
-                key={indice}
-                valor={valor}
-                mantido={mantidos.includes(indice)}
-                onClick={minhaVez && rolagensRestantes > 0 && !iaPensando ? () => alternarMantido(indice) : undefined}
-              />
-            ))}
-          </div>
-          <p className="mt-3 text-center text-xs text-slate-400">
-            Toque num dado para mantê-lo entre as rolagens.
-          </p>
-          {minhaVez && rolagensRestantes > 0 && (
-            <div className="mt-4 text-center">
-              <button
-                onClick={rolar}
-                className="rounded-lg bg-blue-600 px-8 py-3 font-bold text-white transition hover:bg-blue-700"
-              >
-                Rolar Dados
-              </button>
-            </div>
-          )}
-        </div>
-
-        <div className="mb-6 rounded-lg bg-slate-800 p-6">
-          <h3 className="mb-4 text-lg font-semibold text-white">Cartela de Pontuação</h3>
-          <div className="space-y-2">
-            {CATEGORIAS.map((categoria) => {
-              const meu = meuPlacar[categoria];
-              const dele = placarIa[categoria];
-              const livre = podeMarcar(categoria);
-              const jaUsei = minhasMarcadas.includes(categoria);
-              return (
-                <button
-                  key={categoria}
-                  type="button"
-                  onClick={() => livre && marcar(categoria)}
-                  disabled={!livre}
-                  className={[
-                    "flex w-full items-center justify-between rounded-lg p-3 text-left transition",
-                    livre ? "cursor-pointer bg-slate-700 hover:bg-slate-600" : "bg-slate-700/50",
-                  ].join(" ")}
-                >
-                  <span className="font-medium text-white">
-                    {ROTULOS[categoria]}
-                    {jaUsei && <span className="ml-2 text-xs text-slate-400">(marcado)</span>}
-                  </span>
-                  <div className="flex gap-4">
-                    <span className="text-slate-300">{meu !== undefined ? meu : "-"}</span>
-                    <span className="text-slate-500">{dele !== undefined ? dele : "-"}</span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="mb-6 rounded-lg bg-slate-800 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-slate-400">Seu Total</p>
-              <p className="text-2xl font-bold text-white">{totalDe(meuPlacar)}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-slate-400">Total da IA</p>
-              <p className="text-2xl font-bold text-white">{totalDe(placarIa)}</p>
-            </div>
-          </div>
-        </div>
-
-        {acabou && (
-          <div className="text-center">
-            <button
-              onClick={novaPartida}
-              className="rounded-lg bg-green-600 px-8 py-3 font-bold text-white transition hover:bg-green-700"
-            >
-              Novo Jogo
-            </button>
-          </div>
-        )}
+        <p className="mt-3 text-center text-xs text-slate-400">
+          Toque num dado para mantê-lo entre as rolagens.
+        </p>
       </div>
-    </div>
+
+      <div className="arena-placa">
+        <p className="arena-placa-titulo">Cartela de Pontuação · você × IA</p>
+        <div className="space-y-2">
+          {CATEGORIAS.map((categoria) => {
+            const meu = meuPlacar[categoria];
+            const dele = placarIa[categoria];
+            const livre = podeMarcar(categoria);
+            const jaUsei = minhasMarcadas.includes(categoria);
+            return (
+              <button
+                key={categoria}
+                type="button"
+                onClick={() => livre && marcar(categoria)}
+                disabled={!livre}
+                className={[
+                  "flex w-full items-center justify-between rounded-lg border border-slate-600/60 p-3 text-left transition",
+                  livre ? "cursor-pointer bg-slate-800 hover:bg-slate-700" : "bg-slate-800/50",
+                ].join(" ")}
+              >
+                <span className="font-medium text-white">
+                  {ROTULOS[categoria]}
+                  {jaUsei && <span className="ml-2 text-xs text-slate-400">(marcado)</span>}
+                </span>
+                <div className="flex gap-4">
+                  <span className="font-bold text-cyan-300">{meu !== undefined ? meu : "-"}</span>
+                  <span className="text-slate-500">{dele !== undefined ? dele : "-"}</span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </ArenaJogo>
   );
 }

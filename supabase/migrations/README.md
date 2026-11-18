@@ -89,6 +89,47 @@ migração é aplicada **manualmente** colando o conteúdo do arquivo no
     fase paga UMA vez, mesmo com F5 ou clique repetido. **Sem ela, o jogo
     continua jogável**, mas a fase não persiste e o ranking não aparece.
 
+16. `guerra_de_brio.sql` — **GUERRA DE BRIO** (duelo intelectual 1×1):
+    acervo próprio (`brio_questions` — 6 alternativas A–F, explicação,
+    referência, categoria/subcategoria, dificuldade, parâmetros TRI
+    `tri_a`/`tri_b`/`tri_c`, `assinatura` de antirrepetição, `status`
+    rascunho/revisão/aprovada), catálogo de áreas/subcategorias
+    (`brio_areas`, `brio_subcategorias`), partidas sincronizadas
+    (`brio_partidas`, `brio_partida_questoes`, `brio_respostas` com RLS
+    `user_id = auth.uid()`) e o índice de conhecimento por área
+    (`brio_habilidade`). RPCs: `brio_importar_lote` (alimentação em lote —
+    **só `service_role`**), `brio_aprovar_perguntas` (revisão editorial),
+    `brio_buscar_questoes` (sorteio ponderado com antirrepetição),
+    `brio_criar_partida`, `brio_registrar_resposta`, `brio_finalizar_partida`
+    e `brio_meu_indice`.
+    **Aplicação:** rode o arquivo inteiro no SQL Editor (idempotente).
+    **Alimentação contínua do acervo** (não é SQL — é script, e exige a
+    `service_role`):
+
+    ```bash
+    # 1. importa o acervo curado em src/lib/brio/acervo.ts (entra como rascunho)
+    SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
+      node scripts/brio-importar.mjs --acervo acervo-curado
+
+    # 2. importa um diretório de lotes JSON (escala: quantos lotes quiser)
+    SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
+      node scripts/brio-importar.mjs --lotes lotes/ lote-2026-11
+
+    # 3. revisão editorial em lote (publica o que estava em revisão)
+    SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
+      node scripts/brio-importar.mjs --aprovar acervo-curado
+    ```
+
+    O importador valida (6 alternativas, gabarito A–F, explicação, categoria,
+    dificuldade), deduplica (assinatura idêntica + Jaccard ≥ 0,9) e manda a
+    `assinatura` pronta no payload — a MESMA composição do seed
+    (`<enunciado>##<alternativas ordenadas>`, sem acento, minúsculo).
+    Testes: `node testes/brio-importacao.test.mjs` (18 checks).
+    **NÃO simplificar a assinatura** para só o enunciado: o acervo já gravado
+    usa enunciado+alternativas, e a antirrepetição passaria a aceitar tudo de
+    novo como inédito (ver a nota em `brio_normalizar_texto`).
+    Sem esta migração, o Guerra de Brio não existe no servidor.
+
 ## Como verificar se o SOV BANK está operacional
 
 Após aplicar `sov_bank.sql`, rode no SQL Editor:

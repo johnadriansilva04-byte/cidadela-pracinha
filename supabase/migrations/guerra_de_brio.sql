@@ -1124,6 +1124,34 @@ GRANT EXECUTE ON FUNCTION public.brio_recalcular_habilidade(INTEGER) TO authenti
 -- Recebe um JSONB array de perguntas e insere/atualiza de uma vez.
 -- Ignora duplicatas por assinatura (antirrepetição editorial) e devolve
 -- um relatório do que entrou, do que era duplicado e do que era inválido.
+-- Normalizador da assinatura: MESMA regra do seed (selecao.ts
+-- assinaturaPergunta) e do importador. Sem acento, minúsculo, pontuação vira
+-- espaço, espaços colapsados.
+--
+-- NÃO simplificar isto para regexp_replace(enunciado, '[^a-zA-Z0-9]+', ' '):
+-- essa versão não tira acento ("proprio" != "proprio") e ignora as
+-- alternativas, então NUNCA casa com a assinatura gravada pelo seed - e toda
+-- pergunta já existente entraria de novo como duplicata.
+CREATE OR REPLACE FUNCTION public.brio_normalizar_texto(p_texto TEXT)
+RETURNS TEXT
+LANGUAGE sql
+IMMUTABLE
+SET search_path = public
+AS $$
+  SELECT btrim(
+    regexp_replace(
+      translate(
+        lower(COALESCE(p_texto, '')),
+        'áàâãäåéèêëíìîïóòôõöúùûüçñ',
+        'aaaaaaeeeeiiiiooooouuuucn'
+      ),
+      '[^a-z0-9]+', ' ', 'g'
+    )
+  )
+$$;
+
+REVOKE ALL ON FUNCTION public.brio_normalizar_texto(TEXT) FROM PUBLIC;
+
 CREATE OR REPLACE FUNCTION public.brio_importar_lote(p_perguntas JSONB, p_origem TEXT DEFAULT 'lote')
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -1156,9 +1184,14 @@ BEGIN
       CONTINUE;
     END IF;
 
-    -- A assinatura pode vir pronta; se não vier, é derivada do enunciado.
-    v_assimetria := COALESCE(v_item->>'assinatura',
-      lower(regexp_replace(v_item->>'enunciado', '[^a-zA-Z0-9]+', ' ', 'g')));
+    -- A assinatura pode vir pronta; se não vier, é derivada do enunciado E das
+    -- alternativas (mesma composição do seed: "<enunciado>##<alts ordenadas>").
+    v_assimetria := COALESCE(NULLIF(btrim(v_item->>'assinatura'), ''),
+      public.brio_normalizar_texto(v_item->>'enunciado') || '##' ||
+      COALESCE((
+        SELECT string_agg(public.brio_normalizar_texto(alt->>'texto'), '|' ORDER BY public.brio_normalizar_texto(alt->>'texto'))
+        FROM jsonb_array_elements(v_item->'alternativas') AS alt
+      ), ''));
 
     SELECT EXISTS (SELECT 1 FROM public.brio_questions q WHERE q.assinatura = v_assimetria)
     INTO v_existe;

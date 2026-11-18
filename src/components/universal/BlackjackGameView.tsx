@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BackButton } from "@/components/BackButton";
+import { ArenaJogo } from "@/components/universal/ArenaJogo";
 import { UniversalGameFactory } from "@/lib/universal/UniversalGameFactory";
 import type { ResultadoPartida } from "@/lib/universal/campanhaJogos";
 import type { GameMove, UniversalGameState } from "@/lib/universal/UniversalGameEngine";
@@ -152,120 +152,108 @@ export function BlackjackGameView({ onBack, forca, onFim }: BlackjackGameViewPro
           : "Empate — aposta devolvida.";
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-emerald-950 to-slate-900 p-4">
-      <BackButton onClick={sairDaMesa} />
-      <div className="mx-auto max-w-3xl">
-        <h1 className="mb-6 text-center text-3xl font-bold text-white">Blackjack</h1>
-
-        <div className="mb-4 rounded-lg bg-slate-800 p-4 text-white">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm text-slate-300">
-              Fichas: <span className="font-bold text-white">{fichas}</span>
-            </p>
-            <p className="text-sm text-slate-300">
-              Aposta: <span className="font-bold text-white">{aposta || "—"}</span>
-            </p>
-            <p className="text-sm text-slate-300">
-              Fase: <span className="font-bold text-white">{fase === "betting" ? "Apostas" : "Jogo"}</span>
-            </p>
-          </div>
-          {acabou && mensagemFinal && (
-            <p className="mt-2 text-lg font-bold text-green-400">{mensagemFinal}</p>
-          )}
-        </div>
-
-        {/* Dealer */}
-        <div className="mb-6 rounded-lg bg-slate-800 p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-slate-300">Banca</h3>
-            {maoDealer.length > 0 && (
-              <span className="text-sm text-slate-300">
-                Total: <span className="font-bold text-white">{valorDealer}</span>
-              </span>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {maoDealer.length === 0 && <p className="text-sm text-slate-400">Aguardando as apostas.</p>}
-            {maoDealer.map((carta, i) => (
-              // A segunda carta da banca só aparece depois que a mão fecha.
-              <Carta
-                key={carta.id}
-                texto={!acabou && i === 1 ? "?" : simboloDaCarta(carta)}
-                vermelha={!acabou && i === 1 ? false : cartaVermelha(carta)}
-              />
+    <ArenaJogo
+      titulo="Blackjack"
+      onBack={sairDaMesa}
+      turno={acabou ? undefined : fase === "betting" ? "Apostas" : "Sua vez"}
+      status={
+        <>
+          <span className="arena-turno">
+            <span className="arena-turno-rot">Fichas:</span>
+            <strong>{fichas}</strong>
+          </span>
+          <span className="arena-turno">
+            <span className="arena-turno-rot">Aposta:</span>
+            <strong>{aposta || "—"}</strong>
+          </span>
+          <span className="arena-turno">
+            <span className="arena-turno-rot">Fase:</span>
+            <strong>{fase === "betting" ? "Apostas" : "Jogo"}</strong>
+          </span>
+        </>
+      }
+      versus={{ eu: "Você", oponente: "Banca" }}
+      pontos={{
+        eu: minhaMao.length > 0 ? meuValor : "—",
+        oponente: maoDealer.length > 0 ? valorDealer : "—",
+      }}
+      acabou={acabou}
+      resultado={
+        acabou
+          ? /venceu|blackjack|21/i.test(mensagemFinal ?? "")
+            ? "vitoria"
+            : /empate/i.test(mensagemFinal ?? "")
+              ? "empate"
+              : "derrota"
+          : null
+      }
+      mensagemFim={mensagemFinal}
+      acoes={
+        fase === "betting" && !acabou ? (
+          <>
+            {apostas.map((valor) => (
+              <button key={valor} onClick={() => apostar(valor)} className="arena-btn">
+                {valor}
+              </button>
             ))}
-          </div>
-        </div>
-
-        {/* Jogador */}
-        <div className="mb-6 rounded-lg bg-slate-800 p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-slate-300">Sua mão</h3>
-            {minhaMao.length > 0 && (
-              <span className="text-sm text-slate-300">
-                Total:{" "}
-                <span className={meuValor > 21 ? "font-bold text-red-400" : "font-bold text-white"}>
-                  {meuValor}
-                  {meuValor > 21 ? " (estourou)" : ""}
-                </span>
-              </span>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {minhaMao.length === 0 && <p className="text-sm text-slate-400">Nenhuma carta ainda.</p>}
-            {minhaMao.map((carta) => (
-              <Carta key={carta.id} texto={simboloDaCarta(carta)} vermelha={cartaVermelha(carta)} />
-            ))}
-          </div>
-        </div>
-
-        {/* Ações */}
-        {fase === "betting" && !acabou && (
-          <div className="rounded-lg bg-slate-800 p-4">
-            <h3 className="mb-3 text-sm font-semibold text-slate-300">Escolha a aposta</h3>
-            <div className="flex flex-wrap gap-3">
-              {apostas.map((valor) => (
-                <button
-                  key={valor}
-                  onClick={() => apostar(valor)}
-                  className="rounded-lg bg-amber-600 px-6 py-3 font-bold text-white transition hover:bg-amber-700"
-                >
-                  {valor}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {fase === "playing" && !acabou && (
-          <div className="flex flex-wrap gap-3 rounded-lg bg-slate-800 p-4">
-            <button
-              onClick={pedirCarta}
-              disabled={meuValor >= 21}
-              className="rounded-lg bg-emerald-600 px-6 py-3 font-bold text-white transition hover:bg-emerald-700 disabled:opacity-50"
-            >
+          </>
+        ) : fase === "playing" && !acabou ? (
+          <>
+            <button onClick={pedirCarta} disabled={meuValor >= 21} className="arena-btn arena-btn--primario">
               Pedir carta
             </button>
-            <button
-              onClick={parar}
-              className="rounded-lg bg-sky-600 px-6 py-3 font-bold text-white transition hover:bg-sky-700"
-            >
+            <button onClick={parar} className="arena-btn">
               Parar
             </button>
-          </div>
-        )}
-
-        {acabou && (
-          <div className="mt-6 text-center">
-            <button
-              onClick={novaPartida}
-              className="rounded-lg bg-green-600 px-8 py-3 font-bold text-white transition hover:bg-green-700"
-            >
-              Novo Jogo
-            </button>
-          </div>
-        )}
+          </>
+        ) : null
+      }
+      onNovoJogo={novaPartida}
+    >
+      {/* Banca */}
+      <div className="arena-placa">
+        <div className="mb-3 flex items-center justify-between">
+          <p className="arena-placa-titulo mb-0">Banca</p>
+          {maoDealer.length > 0 && (
+            <span className="text-sm text-slate-300">
+              Total: <span className="font-bold text-white">{valorDealer}</span>
+            </span>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {maoDealer.length === 0 && <p className="text-sm text-slate-400">Aguardando as apostas.</p>}
+          {maoDealer.map((carta, i) => (
+            // A segunda carta da banca só aparece depois que a mão fecha.
+            <Carta
+              key={carta.id}
+              texto={!acabou && i === 1 ? "?" : simboloDaCarta(carta)}
+              vermelha={!acabou && i === 1 ? false : cartaVermelha(carta)}
+            />
+          ))}
+        </div>
       </div>
-    </div>
+
+      {/* Jogador */}
+      <div className="arena-placa">
+        <div className="mb-3 flex items-center justify-between">
+          <p className="arena-placa-titulo mb-0">Sua mão</p>
+          {minhaMao.length > 0 && (
+            <span className="text-sm text-slate-300">
+              Total:{" "}
+              <span className={meuValor > 21 ? "font-bold text-red-400" : "font-bold text-white"}>
+                {meuValor}
+                {meuValor > 21 ? " (estourou)" : ""}
+              </span>
+            </span>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {minhaMao.length === 0 && <p className="text-sm text-slate-400">Nenhuma carta ainda.</p>}
+          {minhaMao.map((carta) => (
+            <Carta key={carta.id} texto={simboloDaCarta(carta)} vermelha={cartaVermelha(carta)} />
+          ))}
+        </div>
+      </div>
+    </ArenaJogo>
   );
 }

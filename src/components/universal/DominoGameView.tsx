@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { BackButton } from "@/components/BackButton";
+import { ArenaJogo } from "@/components/universal/ArenaJogo";
 import { UniversalGameFactory } from "@/lib/universal/UniversalGameFactory";
 import type { GameMove, GamePiece, UniversalGameState } from "@/lib/universal/UniversalGameEngine";
 import { lerMesaDomino, lerPontasDomino } from "@/lib/universal/estadoTabuleiro";
@@ -159,134 +159,102 @@ export function DominoGameView({ onBack, forca, onFim }: DominoGameViewProps) {
     mao.reduce((soma, p) => soma + Number(p.data?.["left"] ?? 0) + Number(p.data?.["right"] ?? 0), 0);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 p-4">
-      <BackButton onClick={onBack} />
-      <div className="mx-auto max-w-6xl">
-        <h1 className="mb-6 text-center text-3xl font-bold text-white">Dominó</h1>
-
-        <div className="mb-4 rounded-lg bg-slate-800 p-4 text-white">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm text-slate-300">
-              Turno:{" "}
-              <span className="font-bold text-white">{minhaVez ? "Você" : "IA"}</span>
-            </p>
-            <p className="text-sm text-slate-300">
-              Pontas:{" "}
-              <span className="font-bold text-white">
-                {pontas.left === -1 ? "mesa vazia" : `${pontas.left} · ${pontas.right}`}
-              </span>
-            </p>
-            {iaPensando && <p className="text-sm text-yellow-400">IA pensando...</p>}
-          </div>
-          {acabou && (
-            <p className="mt-2 text-lg font-bold text-green-400">
-              {vencedor === null ? "Empate!" : vencedor === 0 ? "Você venceu!" : "IA venceu!"}
-            </p>
-          )}
-        </div>
-
-        {/* Mesa */}
-        <div className="mb-6 rounded-lg bg-slate-800 p-4">
-          <h3 className="mb-3 text-sm font-semibold text-slate-300">Mesa</h3>
-          <div className="flex min-h-24 flex-wrap items-center gap-2">
-            {mesa.length === 0 && (
-              <p className="text-sm text-slate-400">Nenhuma peça na mesa ainda.</p>
+    <ArenaJogo
+      titulo="Dominó"
+      onBack={onBack}
+      turno={acabou ? undefined : minhaVez ? "Você" : "IA"}
+      iaPensando={iaPensando}
+      status={
+        <span className="arena-turno">
+          <span className="arena-turno-rot">Pontas:</span>
+          <strong>
+            {pontas.left === -1 ? "mesa vazia" : `${pontas.left} · ${pontas.right}`}
+          </strong>
+        </span>
+      }
+      versus={{ eu: "Você", oponente: "IA" }}
+      pontos={{ eu: minhaMao.length, oponente: maoOponente.length }}
+      acabou={acabou}
+      resultado={
+        acabou ? (vencedor === null ? "empate" : vencedor === 0 ? "vitoria" : "derrota") : null
+      }
+      mensagemFim={acabou ? (vencedor === null ? "Empate!" : "Bateu!") : null}
+      acoes={
+        precisaDistribuir ? null : (
+          <>
+            {movimentos.some((m) => m.type === "draw") && (
+              <button
+                onClick={comprar}
+                disabled={!minhaVez || iaPensando}
+                className="arena-btn"
+              >
+                Comprar do monte
+              </button>
             )}
-            {mesa.map((peca) => (
-              <Peca key={peca.id} peca={peca} />
-            ))}
-          </div>
-        </div>
-
-        {/* Mão do oponente (só a contagem) */}
-        <div className="mb-4 rounded-lg bg-slate-800 p-3 text-sm text-slate-300">
-          IA: <span className="font-bold text-white">{maoOponente.length}</span> peças
-          {" · "}
-          {pontosDaMao(maoOponente)} pontos na mão
-        </div>
-
-        {/* Sua mão */}
-        <div className="rounded-lg bg-slate-800 p-4">
-          <h3 className="mb-3 text-sm font-semibold text-slate-300">
-            Sua mão ({minhaMao.length} peças)
-          </h3>
-
-          {precisaDistribuir ? (
-            <button
-              onClick={distribuir}
-              className="rounded-lg bg-emerald-600 px-6 py-3 font-bold text-white transition hover:bg-emerald-700"
-            >
-              Distribuir as peças e começar
-            </button>
-          ) : (
-            <>
-              <div className="flex flex-wrap gap-3">
-                {minhaMao.map((peca, indice) => (
-                  <div
-                    key={peca.id}
-                    className={indice === selecionada ? "rounded ring-4 ring-emerald-400" : ""}
-                  >
-                    <Peca
-                      peca={peca}
-                      clicavel={minhaVez && !iaPensando && !acabou}
-                      onClick={() => setSelecionada(indice === selecionada ? null : indice)}
-                    />
-                  </div>
-                ))}
-              </div>
-
-              {selecionada !== null && minhaVez && (
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <button
-                    onClick={() => jogarNaPonta("left")}
-                    className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-sky-700"
-                  >
-                    Jogar na ponta esquerda
-                  </button>
-                  <button
-                    onClick={() => jogarNaPonta("right")}
-                    className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-sky-700"
-                  >
-                    Jogar na ponta direita
-                  </button>
-                </div>
-              )}
-
-              <div className="mt-4 flex flex-wrap gap-2">
-                {movimentos.some((m) => m.type === "draw") && (
-                  <button
-                    onClick={comprar}
-                    disabled={!minhaVez || iaPensando}
-                    className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-amber-700 disabled:opacity-50"
-                  >
-                    Comprar do monte
-                  </button>
-                )}
-                {movimentos.some((m) => m.type === "pass") && (
-                  <button
-                    onClick={passar}
-                    disabled={!minhaVez || iaPensando}
-                    className="rounded-lg bg-slate-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-slate-700 disabled:opacity-50"
-                  >
-                    Passar a vez
-                  </button>
-                )}
-              </div>
-            </>
+            {movimentos.some((m) => m.type === "pass") && (
+              <button onClick={passar} disabled={!minhaVez || iaPensando} className="arena-btn">
+                Passar a vez
+              </button>
+            )}
+          </>
+        )
+      }
+      onNovoJogo={novaPartida}
+    >
+      {/* Mesa */}
+      <div className="arena-placa">
+        <p className="arena-placa-titulo">Mesa</p>
+        <div className="flex min-h-24 flex-wrap items-center justify-center gap-2">
+          {mesa.length === 0 && (
+            <p className="text-sm text-slate-400">Nenhuma peça na mesa ainda.</p>
           )}
+          {mesa.map((peca) => (
+            <Peca key={peca.id} peca={peca} />
+          ))}
         </div>
+      </div>
 
-        {acabou && (
-          <div className="mt-6 text-center">
-            <button
-              onClick={novaPartida}
-              className="rounded-lg bg-green-600 px-8 py-3 font-bold text-white transition hover:bg-green-700"
-            >
-              Novo Jogo
-            </button>
-          </div>
+      {/* Sua mão */}
+      <div className="arena-placa">
+        <p className="arena-placa-titulo">
+          Sua mão ({minhaMao.length} peças) · IA com {maoOponente.length} (
+          {pontosDaMao(maoOponente)} pts)
+        </p>
+
+        {precisaDistribuir ? (
+          <button onClick={distribuir} className="arena-btn arena-btn--primario">
+            Distribuir as peças e começar
+          </button>
+        ) : (
+          <>
+            <div className="flex flex-wrap justify-center gap-3">
+              {minhaMao.map((peca, indice) => (
+                <div
+                  key={peca.id}
+                  className={indice === selecionada ? "rounded ring-4 ring-emerald-400" : ""}
+                >
+                  <Peca
+                    peca={peca}
+                    clicavel={minhaVez && !iaPensando && !acabou}
+                    onClick={() => setSelecionada(indice === selecionada ? null : indice)}
+                  />
+                </div>
+              ))}
+            </div>
+
+            {selecionada !== null && minhaVez && (
+              <div className="mt-4 flex flex-wrap justify-center gap-2">
+                <button onClick={() => jogarNaPonta("left")} className="arena-btn">
+                  Jogar na ponta esquerda
+                </button>
+                <button onClick={() => jogarNaPonta("right")} className="arena-btn">
+                  Jogar na ponta direita
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
-    </div>
+    </ArenaJogo>
   );
 }
