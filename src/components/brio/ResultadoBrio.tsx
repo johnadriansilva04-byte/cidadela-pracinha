@@ -17,7 +17,7 @@ import { AREAS } from "@/lib/brio/categorias";
 import { rotuloIndice } from "@/lib/brio/tri";
 import { aproveitamento, vencedorDoPlacar } from "@/lib/brio/duelo";
 import { registrarEventoMissao } from "@/lib/cidadela/pracinhaCore";
-import { supabase } from "@/integrations/supabase/client";
+import { isSupabaseConfigured, supabase } from "@/integrations/supabase/client";
 
 interface ResultadoProps {
   visao: {
@@ -85,13 +85,18 @@ export function ResultadoBrio({
     if (veredito === "vitoria") {
       void registrarEventoMissao("brio_vitoria" as never).catch(() => null);
     }
-    void Promise.resolve(
-      supabase.rpc("cidadela_registrar_resultado_jogo", {
-        p_jogo_id: "brio",
-        p_resultado: veredito,
-        p_nome_exibicao: nomeEu ?? null,
-      }),
-    ).catch(() => undefined);
+    // Sem servidor configurado, `supabase.rpc` lança de forma SÍNCRONA — um
+    // `.catch()` no Promise não pegaria e derrubaria a tela de resultado
+    // inteira. O ranking é acessório: sem Supabase, o duelo segue local.
+    if (isSupabaseConfigured()) {
+      void Promise.resolve(
+        supabase.rpc("cidadela_registrar_resultado_jogo", {
+          p_jogo_id: "brio",
+          p_resultado: veredito,
+          p_nome_exibicao: nomeEu ?? null,
+        }),
+      ).catch(() => undefined);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

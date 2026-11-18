@@ -130,6 +130,16 @@ migração é aplicada **manualmente** colando o conteúdo do arquivo no
     novo como inédito (ver a nota em `brio_normalizar_texto`).
     Sem esta migração, o Guerra de Brio não existe no servidor.
 
+    **ATUALIZAÇÃO DO ACERVO (137 perguntas)**: o arquivo foi regerado com o
+    acervo expandido (49 do núcleo + 88 da expansão), cobrindo as 91
+    subcategorias do catálogo — antes 44 delas não tinham nenhuma pergunta, e
+    quem escolhesse, por exemplo, "Neuropsicologia" caía em partida vazia. O
+    seed é idempotente (`ON CONFLICT (id) DO UPDATE`), então reaplicar o
+    arquivo inteiro atualiza as existentes e insere as novas, sem duplicar.
+    Alternativa sem reaplicar o SQL: `node scripts/brio-importar.mjs --acervo
+    acervo-curado` (exige `SUPABASE_SERVICE_ROLE_KEY`), que faz o mesmo pelo
+    caminho da RPC com deduplicação por assinatura.
+
 ## Como verificar se o SOV BANK está operacional
 
 Após aplicar `sov_bank.sql`, rode no SQL Editor:

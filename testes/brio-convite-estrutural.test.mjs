@@ -108,6 +108,30 @@ const aviso = /AVISO_MODO_LOCAL =\s*\n?\s*"([^"]+)"/.exec(API)?.[1] ?? "";
 checar(/não é salvo/.test(aviso), "o aviso diz que o resultado não é salvo");
 checar(!/sincroniz/i.test(aviso), "o aviso NÃO promete sincronização (o modo local não salva)");
 
+console.log("\n=== 8. A tela de resultado degrada sem servidor ===");
+// `supabase.rpc` lança de forma SÍNCRONA quando o Supabase não está
+// configurado, e um `.catch()` no Promise não pega isso: a tela de resultado
+// quebrava inteira (build sem VITE_SUPABASE_*). O ranking é acessório, então
+// precisa vir atrás da checagem de configuração.
+const RESULTADO = readFileSync("src/components/brio/ResultadoBrio.tsx", "utf8");
+checar(
+  /if \(isSupabaseConfigured\(\)\) \{/.test(RESULTADO),
+  "o resultado checa isSupabaseConfigured antes de chamar o ranking",
+);
+checar(
+  /if \(isSupabaseConfigured\(\)\) \{[\s\S]{0,400}?supabase\.rpc\(/.test(RESULTADO),
+  "a chamada de ranking está DENTRO da guarda de configuração",
+);
+checar(
+  (RESULTADO.match(/supabase\.rpc\(/g) ?? []).length ===
+    (RESULTADO.match(/isSupabaseConfigured\(\)/g) ?? []).length,
+  "cada supabase.rpc do resultado tem uma guarda de configuração",
+);
+checar(
+  /isSupabaseConfigured/.test(RESULTADO),
+  "a tela importa isSupabaseConfigured",
+);
+
 console.log(`\n${ok} passaram, ${falhas} falharam (total ${ok + falhas})`);
 if (falhas > 0) process.exit(1);
 console.log("BRIO — CONVITE (contrato) OK");

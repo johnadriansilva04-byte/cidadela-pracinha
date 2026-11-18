@@ -16,6 +16,7 @@
 import type { Letra } from "./types";
 import { LETRAS } from "./types";
 import { embaralhar, rngDe, type PerguntaBruta } from "./selecao";
+import { ACERVO_EXPANSAO } from "./acervo-expansao";
 
 /** Atalho: monta as 6 alternativas na ordem canônica A–F. */
 function alts(a: string, b: string, c: string, d: string, e: string, f: string) {
@@ -981,8 +982,24 @@ export const ACERVO_BRIO: PerguntaBruta[] = (
   ] satisfies SemUsos[]
 ).map((p) => ({ ...p, usos: 0 }));
 
+/**
+ * Acervo completo = núcleo curado + expansão que cobre as subcategorias que
+ * estavam sem nenhuma pergunta. A checagem de colisão de id roda na carga do
+ * módulo: dois arquivos com o mesmo id fariam o gabarito local divergir do
+ * banco silenciosamente, então é melhor quebrar aqui, alto e claro.
+ */
+export const ACERVO_COMPLETO: PerguntaBruta[] = (() => {
+  const todos = [...ACERVO_BRIO, ...ACERVO_EXPANSAO.map((p) => ({ ...p, usos: 0 }))];
+  const vistos = new Set<string>();
+  for (const p of todos) {
+    if (vistos.has(p.id)) throw new Error(`Acervo do Brio com id duplicado: ${p.id}`);
+    vistos.add(p.id);
+  }
+  return todos;
+})();
+
 /** Acervo com o gabarito reequilibrado — é ESTE que vai para o banco e a UI. */
-export const ACERVO_BRIO_EQUILIBRADO: PerguntaBruta[] = equilibrarGabarito(ACERVO_BRIO);
+export const ACERVO_BRIO_EQUILIBRADO: PerguntaBruta[] = equilibrarGabarito(ACERVO_COMPLETO);
 
 /** Índice por id — usado pelo fallback local e pelos testes. */
 export const ACERVO_POR_ID: Record<string, PerguntaBruta> = Object.fromEntries(

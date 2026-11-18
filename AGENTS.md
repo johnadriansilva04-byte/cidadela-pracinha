@@ -26,12 +26,18 @@ Brio" em `GAMES` de `src/routes/cidadela.tsx`, migration própria
 - **Alimentação do acervo**: `brio_importar_lote` (lotes em rascunho) +
   `brio_aprovar_perguntas` (revisão factual antes de publicar) +
   `brio_calibracao`. Só `ativa AND status='aprovada'` entra nas partidas.
-  O seed (49 perguntas / 10 áreas) é gerado por `testes/gerador-brio-seed.mts`,
-  que REGRAVA a migration — editar o template do gerador, nunca só o .sql.
+  O seed (137 perguntas / 10 áreas / 91 subcategorias) é gerado por
+  `testes/gerador-brio-seed.mts`, que REGRAVA a migration — editar o template
+  do gerador, nunca só o .sql. O acervo vive em `src/lib/brio/acervo.ts`
+  (núcleo curado, 49) + `src/lib/brio/acervo-expansao.ts` (expansão que cobre
+  as 44 subcategorias que estavam sem nenhuma pergunta, 88). Toda subcategoria
+  do catálogo tem questão: `testes/brio-acervo.test.mts` trava isso.
 - **Testes**: `testes/brio-nucleo.test.mts` (86 invariantes do núcleo),
   `testes/brio-convite-estrutural.test.mjs` (31 guardas do contrato
-  SQL↔cliente) e `testes/e2e-guerra-de-brio.mjs` (24 checks no navegador,
-  contra `testes/serve-build.mjs`). `tsc --noEmit` mantém o baseline de 240
+  SQL↔cliente), `testes/brio-acervo.test.mts` (13 de integridade do acervo),
+  `testes/brio-importacao.test.mjs` (18 do importador em lote) e
+  `testes/e2e-guerra-de-brio.mjs` (24 checks no navegador, contra
+  `testes/serve-build.mjs`). `tsc --noEmit` mantém o baseline de 240
   erros pré-existentes; `npm run build` OK.
 
 ## Módulo "Teste de QI" na home + UI profissional (2026-08-28, 32ª passada)
