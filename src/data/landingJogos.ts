@@ -12,6 +12,7 @@
  * Tudo aqui é dado puro: o componente `LandingJogo` só renderiza.
  */
 import type { LucideIcon } from "lucide-react";
+import { DUELO } from "@/lib/brio/types";
 
 export interface PilarJogo {
   icone: string;
@@ -86,7 +87,7 @@ export const LANDING_JOGOS: Record<string, ConteudoLanding> = {
         titulo: "A partida em 6 etapas",
         itens: [
           "A mesma pergunta aparece para os dois jogadores ao mesmo tempo.",
-          "Você tem 15 segundos para escolher entre as alternativas A a F.",
+          `Você tem ${DUELO.SEGUNDOS_POR_PERGUNTA} segundos para escolher entre as alternativas A a F.`,
           "Ao responder, sua escolha é registrada e não pode ser alterada.",
           "Quem respondeu primeiro aguarda o adversário — sem ver a resposta dele.",
           "Quando os dois respondem (ou o tempo acaba), as escolhas são reveladas juntas.",

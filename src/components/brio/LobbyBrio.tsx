@@ -16,6 +16,7 @@ import { useEffect, useMemo, useState } from "react";
 import { carregarCatalogo, backendBrioAtivo, AVISO_MODO_LOCAL, type AreaCatalogo } from "@/lib/brio/api";
 import { MODALIDADES, type Modalidade } from "@/lib/brio/categorias";
 import { NIVEIS_ADVERSARIO } from "@/lib/brio/duelo";
+import { DUELO } from "@/lib/brio/types";
 
 export interface EscolhaDuelo {
   modalidade: Modalidade;
@@ -339,7 +340,7 @@ export function LobbyBrio({ nomeJogador, onIniciar, carregando, erro, podeConvid
           </div>
           <div className="pj-resumo-linha">
             <span className="pj-resumo-rotulo">Formato</span>
-            <span className="pj-resumo-valor">15 segundos por pergunta</span>
+            <span className="pj-resumo-valor">{DUELO.SEGUNDOS_POR_PERGUNTA} segundos por pergunta</span>
           </div>
         </div>
       )}
