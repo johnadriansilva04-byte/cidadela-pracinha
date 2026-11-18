@@ -15,6 +15,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BackButton } from "@/components/BackButton";
 import { LobbyBrio, type EscolhaDuelo } from "./LobbyBrio";
 import { CampanhaBrio } from "./CampanhaBrio";
+import { LandingJogo } from "@/components/cidadela/LandingJogo";
+import { LANDING_JOGOS } from "@/data/landingJogos";
 import { ArenaBrio, type RespostaArena, type RodadaArena } from "./ArenaBrio";
 import { ResultadoBrio } from "./ResultadoBrio";
 import { RevelacaoBrio } from "./RevelacaoBrio";
@@ -59,10 +61,13 @@ interface GuerraDeBrioProps {
   onBack: () => void;
 }
 
-type EstadoUi = "lobby" | "campanha" | "arena" | "resultado";
+type EstadoUi = "inicio" | "lobby" | "campanha" | "arena" | "resultado";
 
 export function GuerraDeBrio({ userId, nomeJogador, conviteInicial, onBack }: GuerraDeBrioProps) {
-  const [estado, setEstado] = useState<EstadoUi>("lobby");
+  // A entrada é a PÁGINA INICIAL do jogo (marketing + explicação). O lobby de
+  // configuração só aparece depois que o jogador decide jogar — antes, tudo era
+  // despejado de uma vez numa única tela.
+  const [estado, setEstado] = useState<EstadoUi>("inicio");
   const [partida, setPartida] = useState<EstadoPartidaServidor | null>(null);
   const [local, setLocal] = useState<PartidaLocal | null>(null);
   const [carregando, setCarregando] = useState(false);
@@ -511,6 +516,35 @@ export function GuerraDeBrio({ userId, nomeJogador, conviteInicial, onBack }: Gu
     );
   }
 
+  // -------------------------------------------------------- página inicial
+  if (estado === "inicio") {
+    return (
+      <>
+        <BackButton />
+        <LandingJogo
+          conteudo={LANDING_JOGOS["brio"]!}
+          rotuloJogar="Jogar agora"
+          notaRodape={`Competindo como ${nomeJogador}.`}
+          onVoltar={onBack}
+          onJogar={() => setEstado("lobby")}
+          extra={
+            <div style={{ display: "grid", gap: "0.5rem", marginTop: "0.9rem" }}>
+              <button
+                type="button"
+                className="lj-ajuda-btn"
+                style={{ width: "100%", justifyContent: "center", padding: "0.8rem" }}
+                onClick={abrirCampanha}
+                data-brio-historia
+              >
+                📜 {campanhaIniciada(campanha) ? "Continuar o modo história" : "Começar o modo história"}
+              </button>
+            </div>
+          }
+        />
+      </>
+    );
+  }
+
   if (estado === "lobby") {
     return (
       <>
@@ -518,11 +552,10 @@ export function GuerraDeBrio({ userId, nomeJogador, conviteInicial, onBack }: Gu
         <LobbyBrio
           nomeJogador={nomeJogador}
           onIniciar={iniciar}
-          onCampanha={abrirCampanha}
-          temCampanha={campanhaIniciada(campanha)}
           carregando={carregando}
           erro={erro}
           podeConvidar={Boolean(userId)}
+          onVoltar={() => setEstado("inicio")}
         />
       </>
     );
@@ -537,7 +570,7 @@ export function GuerraDeBrio({ userId, nomeJogador, conviteInicial, onBack }: Gu
           estado={campanha}
           onEstado={salvarCampanhaAtual}
           onAbrirDuelo={abrirDueloCampanha}
-          onSair={() => setEstado("lobby")}
+          onSair={() => setEstado("inicio")}
           ultimoDuelo={ultimoDuelo}
           onLimparUltimoDuelo={() => setUltimoDuelo(null)}
         />

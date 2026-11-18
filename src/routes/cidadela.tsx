@@ -42,6 +42,8 @@ import { DominoGameView } from "@/components/universal/DominoGameView";
 import { YahtzeeGameView } from "@/components/universal/YahtzeeGameView";
 import { JogoComCampanha } from "@/components/universal/JogoComCampanha";
 import { GradeJogos } from "@/components/cidadela/GradeJogos";
+import { LandingJogo } from "@/components/cidadela/LandingJogo";
+import { landingDoJogo } from "@/data/landingJogos";
 
 export const Route = createFileRoute("/cidadela")({
   head: () => ({
@@ -220,6 +222,9 @@ function CidadelaCompView() {
   const passosTour: PassoTour[] =
     activeGame === "botao" ? PASSOS_TOUR_FUTEBOL : activeGame === "trilha" ? PASSOS_TOUR_TRILHA : [];
   const [loadingGame, setLoadingGame] = useState<"botao" | "trilha" | "carbrawl" | null>(null);
+  // PÁGINA INICIAL do jogo: a grade leva à apresentação, não direto ao jogo.
+  // O `id` guarda qual jogo está sendo apresentado (null = grade).
+  const [landingDe, setLandingDe] = useState<string | null>(null);
   const [activeModal, setActiveModal] = useState<"sobre" | "como" | "soberania" | null>(null);
   const [perfilCidadela, setPerfilCidadela] = useState<CidadelaPerfil | null>(null);
   const [mostrarProfissoes, setMostrarProfissoes] = useState(false);
@@ -331,7 +336,10 @@ function CidadelaCompView() {
   const openModal = (type: "sobre" | "como" | "soberania") => setActiveModal(type);
   const closeModal = () => setActiveModal(null);
 
-  const handleGameSelect = (game: Game) => {
+  // `jaNaLanding`: o clique veio da PÁGINA INICIAL do jogo. Sem esta flag o
+  // "Jogar agora" reabria a própria landing (handleGameSelect setava landingDe
+  // de novo) e o jogo nunca abria.
+  const handleGameSelect = (game: Game, jaNaLanding = false) => {
     // Futebol: mostra tela de loading temática ANTES de abrir o BotaoGame.
     // Dispara hidratação em paralelo — o FootballLoadingScreen aguarda
     // a promise para que o BotaoGame monte com dados já prontos.
@@ -359,14 +367,20 @@ function CidadelaCompView() {
       setActiveGame(game);
       return;
     }
-    // Jogos do sistema universal
-    if (game === "xadrez" || game === "dama" || game === "blackjack" || game === "domino" || game === "yahtzee") {
+    // Guerra de Brio: duelo intelectual 1×1 (módulo próprio, mesma sessão).
+    // Ele tem a PRÓPRIA página inicial interna — não passa por esta.
+    if (game === "brio") {
       setActiveGame(game);
       return;
     }
-    // Guerra de Brio: duelo intelectual 1×1 (módulo próprio, mesma sessão).
-    if (game === "brio") {
-      setActiveGame(game);
+    // Demais jogos: primeiro a APRESENTAÇÃO, depois o jogo. Antes o clique
+    // caía direto na tela do jogo, sem o jogador saber o que ia encontrar.
+    if (game === "xadrez" || game === "dama" || game === "blackjack" || game === "domino" || game === "yahtzee") {
+      if (jaNaLanding) {
+        setActiveGame(game);
+        return;
+      }
+      setLandingDe(game);
       return;
     }
     // Jogos em breve não fazem nada
@@ -647,6 +661,33 @@ function CidadelaCompView() {
         }}
       />
     );
+  }
+
+  // PÁGINA INICIAL do jogo escolhido (apresentação antes do jogo em si).
+  if (landingDe) {
+    // Captura em const: dentro do callback o TS perde o narrowing do estado.
+    const idLanding = landingDe;
+    const card = GAMES.find((g) => g.id === idLanding);
+    if (card) {
+      return (
+        <>
+          <BackButton />
+          <div className="flex min-h-screen flex-col items-center gap-4 p-3 md:p-6">
+            <main className="painel my-auto w-full max-w-3xl rounded-3xl p-5 shadow-2xl md:p-8">
+              <LandingJogo
+                conteudo={landingDoJogo(idLanding, card)}
+                rotuloJogar="Jogar agora"
+                onVoltar={() => setLandingDe(null)}
+                onJogar={() => {
+                  setLandingDe(null);
+                  handleGameSelect(idLanding as Game, true);
+                }}
+              />
+            </main>
+          </div>
+        </>
+      );
+    }
   }
 
   return (

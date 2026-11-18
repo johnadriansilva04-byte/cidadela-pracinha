@@ -127,6 +127,25 @@ async function entrarNoJogo(page, conta) {
     if (card) card.click();
   });
   await espera(3000);
+
+  // O card abre a PÁGINA INICIAL do jogo (apresentação + "Como jogar"); a
+  // configuração do duelo só aparece depois do "Jogar agora".
+  await page.evaluate(() => {
+    const b = document.querySelector("[data-brio-jogar]");
+    if (b) b.click();
+  });
+  await espera(2500);
+
+  // A configuração é um assistente: a etapa do adversário (onde vive o
+  // convite) exige avançar. Modalidade "multidisciplinar" não tem etapa de
+  // assunto, então um "Continuar" basta.
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll("button")].find((x) =>
+      /^Continuar$/i.test((x.textContent || "").trim()),
+    );
+    if (b) b.click();
+  });
+  await espera(2000);
 }
 
 /** Estado da tela do jogo numa página. */

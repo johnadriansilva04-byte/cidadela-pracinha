@@ -40,11 +40,22 @@ await page.evaluate(() => {
 });
 await esperar(3000);
 
-// Entra no modo história
-await clicar(/Modo história/);
+// Entra no modo história pela PÁGINA INICIAL (o fluxo mudou: a apresentação
+// vem antes do lobby/configuração).
+await page.evaluate(() => document.querySelector("[data-brio-historia]")?.click());
 await esperar(2500);
 
-// --- cena 1: escolhe e continua
+// --- cena 1: o texto é digitado ao vivo; espera a escolha existir de fato.
+async function esperarEscolha(limite = 25000) {
+  const inicio = Date.now();
+  while (Date.now() - inicio < limite) {
+    const existe = await page.evaluate(() => Boolean(document.querySelector("[data-brio-escolha]")));
+    if (existe) return true;
+    await esperar(400);
+  }
+  return false;
+}
+checar(await esperarEscolha(), "as escolhas aparecem depois da digitação (cena 1)");
 await page.evaluate(() => document.querySelector("[data-brio-escolha]")?.click());
 await esperar(1500);
 await clicar(/^Continuar$/);
@@ -53,6 +64,7 @@ await esperar(1800);
 // --- cena 2 (última do ato 1): escolhe e encara a prova
 const textoCena2 = await page.evaluate(() => document.body.innerText);
 checar(/O Século que Não É o Meu/i.test(textoCena2), "chegou na última cena do ato 1");
+checar(await esperarEscolha(), "as escolhas aparecem depois da digitação (cena 2)");
 await page.evaluate(() => document.querySelector("[data-brio-escolha]")?.click());
 await esperar(1500);
 

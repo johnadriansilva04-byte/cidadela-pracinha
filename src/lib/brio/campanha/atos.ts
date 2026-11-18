@@ -25,6 +25,7 @@ export const ATOS: Ato[] = [
     titulo: "O Despertar",
     subtema: "Itália, 1944 — e o chão que não é o meu",
     icone: "🌅",
+    clima: "deslocamento",
     referencias: [],
     cenas: [
       {
@@ -73,6 +74,7 @@ export const ATOS: Ato[] = [
       {
         id: "a1c2",
         titulo: "O Século que Não É o Meu",
+        clima: "presente",
         texto: [
           "Encontro a data. Não vou repetir aqui o número que li naquele painel — " +
             "quem passou por isso entende por que a gente fica um tempo sem conseguir falar.",
@@ -121,6 +123,7 @@ export const ATOS: Ato[] = [
     titulo: "A Guerra que Volta",
     subtema: "Geopolítica: 1914, 1939 e o que veio depois",
     icone: "⚔️",
+    clima: "guerra",
     referencias: [],
     cenas: [
       {
@@ -210,11 +213,13 @@ export const ATOS: Ato[] = [
     titulo: "O Navio e o Silêncio",
     subtema: "Escravidão: o crime mais longo",
     icone: "⛓️",
+    clima: "porao",
     referencias: [],
     cenas: [
       {
         id: "a3c1",
         titulo: "O Que Não Me Contaram",
+        clima: "porao",
         texto: [
           "Eu era um homem do meu tempo. Não me venha com a conversa de que eu não sabia — " +
             "a gente sempre sabe mais do que admite.",
@@ -250,6 +255,7 @@ export const ATOS: Ato[] = [
       {
         id: "a3c2",
         titulo: "Quem Escreveu a Justificativa",
+        clima: "arquivo",
         texto: [
           "O que me intriga não é a crueldade — crueldade eu vi de perto e ela não me surpreende mais.",
           "O que me intriga é o trabalho intelectual. As teorias, os livros, os sermões, as teses sobre " +
@@ -299,6 +305,7 @@ export const ATOS: Ato[] = [
     titulo: "A Ciência do Desprezo",
     subtema: "Eugenia: quando o saber decidiu quem vale mais",
     icone: "🧬",
+    clima: "laboratorio",
     referencias: [],
     cenas: [
       {
@@ -389,6 +396,7 @@ export const ATOS: Ato[] = [
     titulo: "O Tribunal",
     subtema: "Nuremberg: inventar um crime para poder julgar",
     icone: "⚖️",
+    clima: "tribunal",
     referencias: [],
     cenas: [
       {
@@ -480,6 +488,7 @@ export const ATOS: Ato[] = [
     titulo: "O Veredito",
     subtema: "O que eu levo de volta",
     icone: "🎖️",
+    clima: "veredito",
     referencias: [],
     cenas: [
       {

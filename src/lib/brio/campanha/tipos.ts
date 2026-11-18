@@ -99,6 +99,54 @@ export interface DueloDoAto {
   acertosMinimos: number;
 }
 
+/**
+ * CLIMA da cena — a atmosfera visual e sonora.
+ *
+ * O mesmo jogo não pode ter a mesma cara na Itália de 1944, no porão do navio
+ * e na sala do tribunal. O clima é DADO do roteiro (não decisão do componente):
+ * assim a direção de arte acompanha o texto em vez de brigar com ele.
+ */
+export type ClimaCena =
+  /** Campo de batalha: fumaça, ferrugem, luz dura. */
+  | "guerra"
+  /** Deslocamento no tempo: instabilidade, azul frio, vertigem. */
+  | "deslocamento"
+  /** Século XXI visto por quem vem de fora: neon, excesso, ironia. */
+  | "presente"
+  /** Arquivo, documento, prova material: papel, poeira, luz de lâmpada. */
+  | "arquivo"
+  /** Porão de navio: escuridão total, som de casco, claustrofobia. */
+  | "porao"
+  /** Sala de aula/estudo racial: madeira, silêncio, o horror burocrático. */
+  | "laboratorio"
+  /** Tribunal: madeira escura, eco, luz vertical. */
+  | "tribunal"
+  /** Fecho: amanhecer contido, sem catarse fácil. */
+  | "veredito";
+
+/** Intensidade da ambiência sonora (0 desliga). */
+export const CLIMA_AMBIENCIA: Record<ClimaCena, number> = {
+  guerra: 0.5,
+  deslocamento: 0.75,
+  presente: 0.15,
+  arquivo: 0.25,
+  porao: 0.9,
+  laboratorio: 0.6,
+  tribunal: 0.45,
+  veredito: 0.3,
+};
+
+export const CLIMA_LABEL: Record<ClimaCena, string> = {
+  guerra: "Itália, 1944",
+  deslocamento: "Fora do tempo",
+  presente: "Século XXI",
+  arquivo: "Arquivo",
+  porao: "Porão",
+  laboratorio: "Instituto",
+  tribunal: "Tribunal",
+  veredito: "Veredito",
+};
+
 /** Cena narrativa — o coração do RPG de texto. */
 export interface Cena {
   id: string;
@@ -111,6 +159,8 @@ export interface Cena {
   texto: string[];
   /** Referência que sustenta o trecho (quando afirma algo sobre o passado). */
   referenciaId?: string;
+  /** Atmosfera visual/sonora da cena. Ausente = herda o clima do ato. */
+  clima?: ClimaCena;
   /** Escolhas apresentadas ao jogador. */
   escolhas: EscolhaCena[];
   /** Duelo do ato, quando a cena o abre. */
@@ -126,6 +176,8 @@ export interface Ato {
   subtema: string;
   /** Emoji do card. */
   icone: string;
+  /** Clima padrão do ato (a cena pode sobrepor com o seu). */
+  clima: ClimaCena;
   cenas: Cena[];
   referencias: ReferenciaCampanha[];
 }

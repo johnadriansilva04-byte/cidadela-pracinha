@@ -4,6 +4,7 @@
  * Roda com: JITI_TSCONFIG_PATHS=true ./node_modules/.bin/jiti testes/brio-campanha.test.mts
  */
 import { ATOS, atoPorId, totalDeCenas } from "../src/lib/brio/campanha/atos";
+import { CLIMA_AMBIENCIA, CLIMA_LABEL, type ClimaCena } from "../src/lib/brio/campanha/tipos";
 import { REFERENCIAS, referenciaPorId } from "../src/lib/brio/campanha/referencias";
 import {
   aplicarResultadoDuelo,
@@ -256,6 +257,52 @@ const salvo = normalizarCampanha(JSON.parse(JSON.stringify(aprovado.estado)))!;
 checar(salvo.atoAtual === aprovado.estado.atoAtual, "round-trip preserva o ato");
 checar(salvo.concluidos["ato-1"] === 4, "round-trip preserva os acertos");
 checar(salvo.tracos.rigor === aprovado.estado.tracos.rigor, "round-trip preserva os traços");
+
+// ---------------------------------------------------------------------
+// CLIMA — a direção de arte é DADO do roteiro, não decisão do componente.
+// ---------------------------------------------------------------------
+const CLIMAS: ClimaCena[] = [
+  "guerra",
+  "deslocamento",
+  "presente",
+  "arquivo",
+  "porao",
+  "laboratorio",
+  "tribunal",
+  "veredito",
+];
+
+checar(ATOS.every((a) => CLIMAS.includes(a.clima)), "todo ato declara um clima conhecido");
+checar(ATOS.length === 6, "os 6 atos estão no roteiro");
+checar(
+  ATOS.every((a) => a.cenas.every((c) => c.clima === undefined || CLIMAS.includes(c.clima))),
+  "toda cena que declara clima usa um clima conhecido",
+);
+checar(CLIMAS.every((c) => typeof CLIMA_LABEL[c] === "string" && CLIMA_LABEL[c].length > 0),
+  "todo clima tem rótulo legível");
+checar(CLIMAS.every((c) => typeof CLIMA_AMBIENCIA[c] === "number" && CLIMA_AMBIENCIA[c] >= 0 && CLIMA_AMBIENCIA[c] <= 1),
+  "toda ambiência está na faixa 0..1");
+
+// O clima precisa MUDAR ao longo da campanha — seis atos com a mesma cara
+// seriam direção de arte nenhuma.
+const distintos = new Set(ATOS.map((a) => a.clima));
+checar(distintos.size === ATOS.length, `cada ato tem um clima PRÓPRIO (${distintos.size} climas para 6 atos)`);
+
+// A cena pode sobrepor o clima do ato (é o caso do porão e do arquivo).
+const cenasComClimaProprio = ATOS.flatMap((a) => a.cenas.filter((c) => c.clima && c.clima !== a.clima));
+checar(cenasComClimaProprio.length >= 2, `há cenas que sobrepõem o clima do ato (${cenasComClimaProprio.length})`);
+checar(ATOS.find((a) => a.id === "ato-3")?.cenas.some((c) => c.clima === "porao"),
+  "o ato da escravidão tem cena de porão (claustrofobia)");
+checar(ATOS.find((a) => a.id === "ato-3")?.cenas.some((c) => c.clima === "arquivo"),
+  "o ato da escravidão tem cena de arquivo (a prova documental)");
+checar(ATOS.find((a) => a.id === "ato-1")?.cenas.some((c) => c.clima === "presente"),
+  "o ato 1 contrasta 1944 com o século XXI (neon)");
+
+// O porão é o clima mais opressivo — a ambiência tem de refletir isso.
+checar(CLIMA_AMBIENCIA.porao === Math.max(...CLIMAS.map((c) => CLIMA_AMBIENCIA[c])),
+  "o porão é o clima de maior ambiência (mais opressivo)");
+checar(CLIMA_AMBIENCIA.presente === Math.min(...CLIMAS.map((c) => CLIMA_AMBIENCIA[c])),
+  "o presente é o clima de menor ambiência (mais leve)");
 
 console.log(`\nMODO HISTÓRIA DO BRIO — ${ok} ok, ${falhas} falhas`);
 if (falhas > 0) process.exit(1);

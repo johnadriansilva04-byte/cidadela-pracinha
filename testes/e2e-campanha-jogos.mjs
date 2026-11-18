@@ -83,6 +83,15 @@ async function abrirPainel(label) {
   }, label);
   await espera(2500);
   if (!achou) return false;
+
+  // O card abre a PÁGINA INICIAL do jogo (apresentação + "Como jogar"); o
+  // painel de campanha só aparece depois do "Jogar agora".
+  await page.evaluate(() => {
+    const b = document.querySelector("[data-brio-jogar]");
+    if (b) b.click();
+  });
+  await espera(2500);
+
   return page.evaluate(() => Boolean(document.querySelector(".jcamp-wrap")));
 }
 

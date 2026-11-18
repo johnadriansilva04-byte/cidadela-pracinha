@@ -103,9 +103,18 @@ async function abrirJogo(label) {
   await espera(2500);
   if (!achou) return false;
 
-  // O jogo agora abre no PAINEL DE CAMPANHA (fase, história, ranking). É
-  // preciso entrar na partida antes de jogar — sem isso o teste procurava
-  // casas de tabuleiro numa tela que ainda é o painel.
+  // O card agora leva à PÁGINA INICIAL do jogo (apresentação + "Como jogar").
+  // É preciso passar por ela antes de chegar ao jogo em si.
+  await page.evaluate(() => {
+    const b = document.querySelector("[data-brio-jogar]") ||
+      [...document.querySelectorAll("button")].find((x) => /jogar agora/i.test(x.textContent || ""));
+    if (b) b.click();
+  });
+  await espera(2500);
+
+  // Depois vem o PAINEL DE CAMPANHA (fase, história, ranking). É preciso
+  // entrar na partida antes de jogar — sem isso o teste procurava casas de
+  // tabuleiro numa tela que ainda é o painel.
   await page.evaluate(() => {
     const b = document.querySelector(".jcamp-jogar");
     if (b) b.click();
