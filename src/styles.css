@@ -2078,6 +2078,326 @@ button.celular-card:hover {
    Arena de competição: dois competidores frente a frente, X central
    com iluminação dramática, placar individual e rodada cronometrada.
    ================================================================== */
+/* =====================================================================
+   MODO HISTÓRIA do Guerra de Brio — campanha narrativa (RPG de texto).
+   Reaproveita as variáveis do `.brio-app` (ouro, esq/dir, ok/erro) para não
+   criar segunda identidade visual.
+   ===================================================================== */
+
+.brio-camp-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.brio-link {
+  background: none;
+  border: 0;
+  padding: 0.2rem 0.1rem;
+  color: var(--brio-ouro);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.brio-link:hover {
+  color: var(--brio-fg);
+}
+
+/* ---------------------------------------------------------- narrativa */
+.brio-narrativa {
+  margin: 0 0 0.85rem;
+  font-size: 0.95rem;
+  line-height: 1.75;
+  color: var(--brio-fg-soft);
+}
+
+.brio-narrativa:last-child {
+  margin-bottom: 0;
+}
+
+/* ------------------------------------------------- fonte / procedência */
+.brio-fonte {
+  margin-top: 1rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 0.7rem;
+  border: 1px solid var(--brio-borda);
+  border-left-width: 3px;
+  background: oklch(0.22 0 0 / 0.6);
+  display: grid;
+  gap: 0.3rem;
+}
+
+.brio-fonte strong {
+  font-size: 0.86rem;
+  color: var(--brio-fg);
+}
+
+.brio-fonte p {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  color: var(--brio-fg-soft);
+}
+
+.brio-fonte-selo {
+  justify-self: start;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: oklch(0.32 0 0);
+  color: var(--brio-fg);
+}
+
+.brio-fonte-origem {
+  font-size: 0.72rem;
+  color: var(--brio-muted);
+  font-style: italic;
+}
+
+/* A cor da borda diz a FORÇA da afirmação — fato, hipótese ou ficção. */
+.brio-fonte--historical_fact {
+  border-left-color: var(--brio-ok);
+}
+.brio-fonte--historical_fact .brio-fonte-selo {
+  background: oklch(0.4 0.12 150);
+  color: oklch(0.98 0 0);
+}
+
+.brio-fonte--secondary_source {
+  border-left-color: oklch(0.72 0.13 220);
+}
+.brio-fonte--secondary_source .brio-fonte-selo {
+  background: oklch(0.4 0.1 220);
+  color: oklch(0.98 0 0);
+}
+
+.brio-fonte--hypothesis {
+  border-left-color: var(--brio-ouro);
+}
+.brio-fonte--hypothesis .brio-fonte-selo {
+  background: oklch(0.5 0.11 80);
+  color: oklch(0.14 0 0);
+}
+
+.brio-fonte--fiction {
+  border-left-color: oklch(0.66 0.18 300);
+}
+.brio-fonte--fiction .brio-fonte-selo {
+  background: oklch(0.42 0.14 300);
+  color: oklch(0.98 0 0);
+}
+
+.brio-fonte--unverified_claim {
+  border-left-color: var(--brio-erro);
+}
+.brio-fonte--unverified_claim .brio-fonte-selo {
+  background: oklch(0.42 0.15 25);
+  color: oklch(0.98 0 0);
+}
+
+.brio-nota-fonte {
+  margin: 0.6rem 0 0;
+  padding: 0.5rem 0.7rem;
+  border-radius: 0.5rem;
+  background: oklch(0.28 0.06 85 / 0.4);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--brio-fg-soft);
+}
+
+/* ----------------------------------------------------------- escolhas */
+.brio-escolhas {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.brio-escolha {
+  width: 100%;
+  text-align: left;
+  padding: 0.8rem 0.95rem;
+  border-radius: 0.8rem;
+  border: 1.5px solid var(--brio-borda);
+  background: oklch(0.24 0 0 / 0.75);
+  color: var(--brio-fg);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.brio-escolha:hover {
+  border-color: var(--brio-ouro);
+  background: oklch(0.28 0.04 85 / 0.7);
+  transform: translateX(3px);
+}
+
+.brio-escolha:focus-visible {
+  outline: 2px solid var(--brio-ouro);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------- progresso dos atos */
+.brio-atos {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.brio-ato {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 0.6rem;
+  border: 1px solid var(--brio-borda);
+  background: oklch(0.22 0 0 / 0.6);
+  opacity: 0.62;
+}
+
+.brio-ato--atual {
+  opacity: 1;
+  border-color: var(--brio-ouro);
+  background: oklch(0.3 0.06 85 / 0.35);
+}
+
+.brio-ato--feito {
+  opacity: 1;
+  border-color: oklch(0.45 0.12 150);
+}
+
+.brio-ato-icone {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.brio-ato-texto {
+  flex: 1;
+  min-width: 0;
+}
+
+.brio-ato-nome {
+  font-size: 0.83rem;
+  font-weight: 700;
+  color: var(--brio-fg);
+}
+
+.brio-ato-sub {
+  font-size: 0.74rem;
+  color: var(--brio-muted);
+}
+
+.brio-ato-marca {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  color: var(--brio-muted);
+  white-space: nowrap;
+}
+
+.brio-ato--feito .brio-ato-marca {
+  color: var(--brio-ok);
+}
+
+.brio-ato--atual .brio-ato-marca {
+  color: var(--brio-ouro);
+}
+
+/* ------------------------------------------------- resultado da prova */
+.brio-resultado-ato {
+  margin-bottom: 0.9rem;
+  padding: 0.8rem 0.9rem;
+  border-radius: 0.8rem;
+  border: 1.5px solid var(--brio-borda);
+  background: oklch(0.22 0 0 / 0.7);
+}
+
+.brio-resultado-ato.brio-ok {
+  border-color: oklch(0.5 0.14 150);
+  background: oklch(0.26 0.07 150 / 0.4);
+}
+
+.brio-resultado-ato.brio-nao {
+  border-color: oklch(0.5 0.14 60);
+  background: oklch(0.26 0.07 60 / 0.35);
+}
+
+.brio-resultado-ato strong {
+  display: block;
+  font-size: 0.9rem;
+  color: var(--brio-fg);
+  margin-bottom: 0.3rem;
+}
+
+.brio-resultado-ato p {
+  margin: 0 0 0.6rem;
+  font-size: 0.83rem;
+  line-height: 1.6;
+  color: var(--brio-fg-soft);
+}
+
+.brio-resultado-botoes {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.brio-resultado-botoes .brio-btn {
+  padding: 0.6rem 1rem;
+  font-size: 0.82rem;
+}
+
+.brio-btn--ghost {
+  background: transparent;
+  border-color: var(--brio-borda);
+  color: var(--brio-fg-soft);
+}
+
+.brio-btn--ghost:hover:not(:disabled) {
+  border-color: var(--brio-ouro);
+  color: var(--brio-fg);
+  box-shadow: none;
+}
+
+/* ------------------------------------------------------- traços finais */
+.brio-traco {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 0.7rem;
+  border: 1px solid var(--brio-borda);
+  background: oklch(0.24 0 0 / 0.6);
+  margin-bottom: 0.6rem;
+}
+
+.brio-traco-rotulo {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--brio-muted);
+}
+
+.brio-traco strong {
+  font-size: 0.9rem;
+  color: var(--brio-ouro);
+}
+
+.brio-tracos-linha {
+  display: flex;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+  color: var(--brio-muted);
+}
+
 .brio-app {
   --brio-fg: oklch(0.97 0 0);
   --brio-fg-soft: oklch(0.86 0 0);

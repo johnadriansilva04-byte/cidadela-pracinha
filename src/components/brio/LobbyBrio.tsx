@@ -24,13 +24,25 @@ export interface EscolhaDuelo {
 interface LobbyProps {
   nomeJogador: string;
   onIniciar: (escolha: EscolhaDuelo) => void;
+  /** Abre o MODO HISTÓRIA (campanha narrativa). */
+  onCampanha: () => void;
+  /** Já existe progresso de campanha neste aparelho. */
+  temCampanha: boolean;
   carregando: boolean;
   erro: string | null;
   /** O duelo por convite só existe com conta (mesma sessão da Cidadela). */
   podeConvidar: boolean;
 }
 
-export function LobbyBrio({ nomeJogador, onIniciar, carregando, erro, podeConvidar }: LobbyProps) {
+export function LobbyBrio({
+  nomeJogador,
+  onIniciar,
+  onCampanha,
+  temCampanha,
+  carregando,
+  erro,
+  podeConvidar,
+}: LobbyProps) {
   const [modalidade, setModalidade] = useState<Modalidade>("multidisciplinar");
   const [convite, setConvite] = useState(false);
   const [areaSlug, setAreaSlug] = useState<string | null>(null);
@@ -80,6 +92,42 @@ export function LobbyBrio({ nomeJogador, onIniciar, carregando, erro, podeConvid
         Dois competidores, a mesma pergunta ao mesmo tempo, {DUELO.SEGUNDOS_POR_PERGUNTA} segundos
         para decidir. Quem domina o assunto leva a rodada.
       </p>
+
+      {/* ---------- Modo de jogo: duelo livre x modo história ---------- */}
+      <section className="brio-painel" style={{ marginBottom: "0.75rem" }}>
+        <h2 className="brio-secao-titulo">Modo de jogo</h2>
+        <div className="brio-grid-2">
+          <button
+            type="button"
+            className="brio-opcao brio-opcao--ativo"
+            aria-pressed="true"
+            data-brio-jogo="duelo"
+          >
+            <span className="brio-opcao-icone">⚔️</span>
+            <span>
+              <span className="brio-opcao-nome">Duelo livre</span>
+              <br />
+              <span className="brio-opcao-desc">Partidas soltas, contra bot ou amigo</span>
+            </span>
+          </button>
+          <button
+            type="button"
+            className="brio-opcao"
+            onClick={onCampanha}
+            aria-pressed="false"
+            data-brio-jogo="campanha"
+          >
+            <span className="brio-opcao-icone">📜</span>
+            <span>
+              <span className="brio-opcao-nome">Modo história</span>
+              <br />
+              <span className="brio-opcao-desc">
+                {temCampanha ? "Continue sua campanha de 6 atos" : "Campanha de 6 atos: FEB, escravidão, eugenia"}
+              </span>
+            </span>
+          </button>
+        </div>
+      </section>
 
       {modoLocal && (
         <div className="brio-aviso">

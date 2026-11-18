@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BackButton } from "@/components/BackButton";
 import { LobbyBrio, type EscolhaDuelo } from "./LobbyBrio";
+import { CampanhaBrio } from "./CampanhaBrio";
 import { ArenaBrio, type RespostaArena, type RodadaArena } from "./ArenaBrio";
 import { ResultadoBrio } from "./ResultadoBrio";
 import { RevelacaoBrio } from "./RevelacaoBrio";
@@ -37,6 +38,15 @@ import {
   type PartidaLocal,
 } from "@/lib/brio/local";
 import { NIVEIS_ADVERSARIO } from "@/lib/brio/duelo";
+import {
+  aplicarResultadoDuelo,
+  campanhaInicial,
+  campanhaIniciada,
+  dueloDoAto,
+  registrarPerguntas,
+} from "@/lib/brio/campanha/motor";
+import { carregarCampanha, salvarCampanha } from "@/lib/brio/campanha/armazenamento";
+import type { DueloDoAto, EstadoCampanha } from "@/lib/brio/campanha/tipos";
 import type { Letra } from "@/lib/brio/types";
 
 interface GuerraDeBrioProps {
@@ -49,7 +59,7 @@ interface GuerraDeBrioProps {
   onBack: () => void;
 }
 
-type EstadoUi = "lobby" | "arena" | "resultado";
+type EstadoUi = "lobby" | "campanha" | "arena" | "resultado";
 
 export function GuerraDeBrio({ userId, nomeJogador, conviteInicial, onBack }: GuerraDeBrioProps) {
   const [estado, setEstado] = useState<EstadoUi>("lobby");
@@ -70,6 +80,16 @@ export function GuerraDeBrio({ userId, nomeJogador, conviteInicial, onBack }: Gu
   const [esperandoConvidado, setEsperandoConvidado] = useState(false);
   const escolhaRef = useRef<EscolhaDuelo | null>(null);
   const sincronizandoRef = useRef(false);
+
+  // --------------------------------------------------------------- campanha
+  /** Progresso do modo história (localStorage por usuário). */
+  const [campanha, setCampanha] = useState<EstadoCampanha | null>(null);
+  /** Prova do ato em andamento: ao terminar, o resultado volta para a campanha. */
+  const [dueloCampanha, setDueloCampanha] = useState<DueloDoAto | null>(null);
+  /** Resultado da última prova, exibido dentro da campanha. */
+  const [ultimoDuelo, setUltimoDuelo] = useState<
+    { acertos: number; total: number; venceu: boolean; minimo: number } | null
+  >(null);
 
   /**
    * Entrada por LINK DIRETO (?brio=<id>): o convidado ocupa o assento 2 e cai
@@ -108,6 +128,20 @@ export function GuerraDeBrio({ userId, nomeJogador, conviteInicial, onBack }: Gu
       vivo = false;
     };
   }, []);
+
+  // Carrega o progresso da campanha do aparelho (uma vez por usuário).
+  useEffect(() => {
+    setCampanha(carregarCampanha(userId));
+  }, [userId]);
+
+  /** Persiste a campanha sempre que ela muda (inclusive o nome do jogador). */
+  const salvarCampanhaAtual = useCallback(
+    (e: EstadoCampanha) => {
+      setCampanha(e);
+      salvarCampanha(userId, e);
+    },
+    [userId],
+  );
 
   // ------------------------------------------------------------------ iniciar
   const iniciar = useCallback(
@@ -159,6 +193,65 @@ export function GuerraDeBrio({ userId, nomeJogador, conviteInicial, onBack }: Gu
     [userId],
   );
 
+  // -------------------------------------------------------- prova da campanha
+  /**
+   * Abre a prova de um ato. Usa o MESMO motor do adversário virtual
+   * (`criarPartidaLocal`), com o recorte de assunto e o nível que o ato define.
+   * Não cria segundo motor nem segundo placar.
+   */
+  const abrirDueloCampanha = useCallback(
+    (duelo: DueloDoAto) => {
+      setErro(null);
+      setMinhaResposta(null);
+      setRevelacao(null);
+      setUltimoDuelo(null);
+      const p = criarPartidaLocal({
+        userId: userId ?? "visitante",
+        modalidade: duelo.modalidade,
+        areaSlug: duelo.areaSlug,
+        subcategoriaSlug: duelo.subcategoriaSlug,
+        botNivel: duelo.nivelAdversario,
+        total: duelo.total,
+        historico: campanha?.historicoPerguntas ?? [],
+        // Semente por ato+tentativa: repetir a prova traz perguntas novas.
+        semente: `campanha:${userId ?? "visitante"}:${duelo.titulo}:${Date.now()}`,
+      });
+      setDueloCampanha(duelo);
+      setModoLocal(true);
+      setLocal(p);
+      setEstado("arena");
+    },
+    [userId, campanha],
+  );
+
+  /**
+   * Encerra a prova: apura o resultado no motor da campanha e volta para a
+   * narrativa. O ato é concluído só se atingiu o mínimo — repetir é permitido.
+   */
+  const encerrarProvaCampanha = useCallback(
+    (acertos: number, idsDasPerguntas: string[]) => {
+      const cfg = dueloCampanha;
+      if (!campanha || !cfg) return;
+      const agora = new Date().toISOString();
+      const comHistorico = registrarPerguntas(campanha, idsDasPerguntas, agora);
+      const { estado: novo, venceu } = aplicarResultadoDuelo(comHistorico, acertos, agora);
+      salvarCampanhaAtual(novo);
+      setUltimoDuelo({
+        acertos,
+        total: cfg.total,
+        venceu,
+        minimo: cfg.acertosMinimos,
+      });
+      setDueloCampanha(null);
+      setLocal(null);
+      setPartida(null);
+      setMinhaResposta(null);
+      setRevelacao(null);
+      setEstado("campanha");
+    },
+    [campanha, dueloCampanha, salvarCampanhaAtual],
+  );
+
   // ------------------------------------------------------------------ responder
   const responder = useCallback(
     async (letra: Letra) => {
@@ -198,6 +291,16 @@ export function GuerraDeBrio({ userId, nomeJogador, conviteInicial, onBack }: Gu
       setLocal(novo);
       setMinhaResposta(null);
       if (novo.status === "finalizado") {
+        // Prova da campanha: o resultado volta para a narrativa, não para a
+        // tela de resultado do duelo livre.
+        if (dueloCampanha) {
+          setRevelacao(null);
+          encerrarProvaCampanha(
+            novo.acertos_1,
+            novo.rodadas.map((r) => r.pergunta_id),
+          );
+          return;
+        }
         // A última rodada vai direto ao resultado: a tela de revelação
         // esconderia o veredito final do duelo.
         setRevelacao(null);
@@ -232,7 +335,7 @@ export function GuerraDeBrio({ userId, nomeJogador, conviteInicial, onBack }: Gu
       revelacaoVistaRef.current = Math.max(revelacaoVistaRef.current, numeroFechado);
       setRevelacao({ rodada: rodadaRevelada as RodadaArena, numero: numeroFechado });
     }
-  }, [modoLocal, local, partida]);
+  }, [modoLocal, local, partida, dueloCampanha, encerrarProvaCampanha]);
 
   /** Sai da tela de revelação e libera a próxima rodada. */
   const continuarAposRevelacao = useCallback(() => {
@@ -254,6 +357,26 @@ export function GuerraDeBrio({ userId, nomeJogador, conviteInicial, onBack }: Gu
     setEstado("lobby");
     if (escolha) void iniciar(escolha);
   }, [iniciar]);
+
+  // ----------------------------------------------------------------- campanha
+  /**
+   * Abre o modo história. Cria a campanha na primeira vez (com o nome do
+   * jogador como protagonista) e retoma de onde parou nas seguintes.
+   */
+  const abrirCampanha = useCallback(() => {
+    const existente = campanha ?? carregarCampanha(userId);
+    const base = existente ?? campanhaInicial({ nome: nomeJogador });
+    const agora = new Date().toISOString();
+    const iniciada: EstadoCampanha = {
+      ...base,
+      iniciadaEm: base.iniciadaEm ?? agora,
+      atualizadaEm: agora,
+    };
+    salvarCampanhaAtual(iniciada);
+    setUltimoDuelo(null);
+    setErro(null);
+    setEstado("campanha");
+  }, [campanha, userId, nomeJogador, salvarCampanhaAtual]);
 
   // ------------------------------------------------------------------ derivados
   const visao = useMemo(() => {
@@ -395,9 +518,28 @@ export function GuerraDeBrio({ userId, nomeJogador, conviteInicial, onBack }: Gu
         <LobbyBrio
           nomeJogador={nomeJogador}
           onIniciar={iniciar}
+          onCampanha={abrirCampanha}
+          temCampanha={campanhaIniciada(campanha)}
           carregando={carregando}
           erro={erro}
           podeConvidar={Boolean(userId)}
+        />
+      </>
+    );
+  }
+
+  // ------------------------------------------------------------- campanha
+  if (estado === "campanha" && campanha) {
+    return (
+      <>
+        <BackButton />
+        <CampanhaBrio
+          estado={campanha}
+          onEstado={salvarCampanhaAtual}
+          onAbrirDuelo={abrirDueloCampanha}
+          onSair={() => setEstado("lobby")}
+          ultimoDuelo={ultimoDuelo}
+          onLimparUltimoDuelo={() => setUltimoDuelo(null)}
         />
       </>
     );
