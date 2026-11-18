@@ -122,13 +122,16 @@ export function YahtzeeGameView({ onBack, forca, onFim }: YahtzeeGameViewProps) 
         let atual = estado;
         // A IA joga o turno inteiro: rola até 3 vezes e então marca uma categoria.
         //
-        // Qualidade da decisão cresce com a fase da campanha:
-        //  • até 2 rolagens: guarda os dados que mais repetem (jogo simples);
-        //  • 3 rolagens: escolhe a categoria de MAIOR pontuação real (usa a
-        //    tabela do adapter, não uma cópia) e mantém os dados que servem
-        //    àquela categoria.
-        const rolagens = forca && forca.maxIterations >= 1500 ? 3 : 2;
-        let rolagensFeitas = 0;
+        // As 3 rolagens são REGRA DO JOGO, não força: o motor só aceita marcar
+        // categoria quando `phase === "scoring"`, e a fase só vira "scoring"
+        // quando `rollsLeft` chega a 0. A versão anterior limitava a IA fraca a
+        // 2 rolagens — ela parava com `rollsLeft = 1` e nunca conseguia marcar,
+        // travando a partida para sempre (nenhum dos dois lados terminava o
+        // turno). A força decide a QUALIDADE da escolha, não quantas vezes rola:
+        //  • fraca: mantém os dados que mais repetem e marca a primeira categoria;
+        //  • forte: mantém os dados que servem à categoria de MAIOR pontuação
+        //    real (tabela do adapter) e marca essa categoria.
+        const jogaBem = forca !== undefined && forca.maxIterations >= 1500;
         const adapter = engine as unknown as {
           calcularPontuacaoCategoria?: (d: number[], c: string) => number;
         };
@@ -141,14 +144,16 @@ export function YahtzeeGameView({ onBack, forca, onFim }: YahtzeeGameViewProps) 
           const rolagem = opcoes.find((m) => m.type === "roll");
           const marcar = opcoes.find((m) => m.type === "custom");
 
-          // Fase de pontuação: escolhe a categoria que mais pontua.
-          if (!rolagem || rolagensFeitas >= rolagens) {
+          // Sem rolagem disponível = hora de marcar (fase "scoring").
+          if (!rolagem) {
             const opcoesMarcar = opcoes.filter((m) => m.type === "custom");
             if (opcoesMarcar.length === 0) break;
             const dados = lerDadosYahtzee(atual);
-            let melhor = marcar;
-            let melhorPontos = -1;
-            if (adapter.calcularPontuacaoCategoria) {
+            // IA fraca: marca a primeira categoria livre (jogo simples).
+            // IA forte: marca a categoria de maior pontuação REAL.
+            let melhor = marcar ?? opcoesMarcar[0]!;
+            if (jogaBem && adapter.calcularPontuacaoCategoria) {
+              let melhorPontos = -1;
               for (const m of opcoesMarcar) {
                 const categoria = String(
                   (m.data as Record<string, unknown> | undefined)?.["category"] ?? "",
@@ -162,7 +167,6 @@ export function YahtzeeGameView({ onBack, forca, onFim }: YahtzeeGameViewProps) 
             }
             if (!melhor) break;
             atual = engine.applyMove(atual, melhor);
-            rolagensFeitas = 0;
             continue;
           }
 
@@ -182,7 +186,6 @@ export function YahtzeeGameView({ onBack, forca, onFim }: YahtzeeGameViewProps) 
                 ((m.data as Record<string, unknown>)["keep"] as number[]).length === manter.length,
             ) ?? rolagem;
           atual = engine.applyMove(atual, rolagemComMantidos);
-          rolagensFeitas += 1;
         }
         setGameState(atual);
         setMantidos([]);

@@ -113,8 +113,15 @@ export class DominoAdapter implements UniversalGameEngine {
     const player = state.currentPlayer;
     const hand = state.players[player]?.hand ?? [];
 
-    if (state.phase === "dealing") {
-      // Primeira jogada - qualquer peça
+    // Primeira jogada: qualquer peça abre o jogo.
+    //
+    // A condição inclui a mesa VAZIA de propósito. Antes só valia em
+    // `phase === "dealing"` — fase em que a mão ainda está vazia, porque as
+    // peças estão no monte. Depois de distribuir, a fase vira "playing" com a
+    // mesa ainda vazia e as pontas em -1: nenhuma peça encaixava em -1, o
+    // jogador só podia passar, e a partida nunca terminava (o empate por
+    // bloqueio exige peças na mesa).
+    if (state.phase === "dealing" || state.pieces.length === 0) {
       for (const piece of hand) {
         moves.push(
           UniversalGameUtils.createMove(player, "play", {
